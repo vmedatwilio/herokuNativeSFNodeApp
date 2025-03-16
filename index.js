@@ -164,12 +164,12 @@ async function createTimileSummarySalesforceRecords( summaries={},parentId,summa
              // Push record to the list
              recordsToCreate.push({
                 Parent_Id__c: parentId,
-                Month__c: monthValue,
+                Month__c: motnhValue,
                 Year__c: year,
                 Summary_Category__c: summaryCategory,
                 Summary_Details__c: summaryValue,
-                FY_Quarter__c: FYQuarterValue,
-                Month_Date__c: startDate,
+                FY_Quarter__c: FYQuartervalue,
+                Month_Date__c: startdate,
                 Number_of_Records__c: count,
                 Account__c: parentId
             });
