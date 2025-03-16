@@ -58,7 +58,7 @@ async function processSummary(accountId, accessToken, callbackUrl) {
        
         let queryStr = `SELECT Description,ActivityDate FROM Task WHERE ActivityDate!=null and AccountId = '${accountId}' AND ActivityDate >= LAST_N_YEARS:4 ORDER BY ActivityDate DESC`;
         
-        conn.query("SELECT Id FROM Organization", (err, result) => {
+        await conn.query("SELECT Id FROM Organization", (err, result) => {
             if (err) {
                 console.error("Query Failed. Invalid Connection:", err);
             } else {
@@ -297,6 +297,7 @@ async function generateFile( activities = []) {
 // Function to fetch records recursively and group them
 async function fetchRecords(conn, queryOrUrl, groupedData = {}, isFirstIteration = true) {
     try {
+        console.log(`Fetching records...${queryOrUrl}`);
         // Query Salesforce (initial query or queryMore for pagination)
         const queryResult = isFirstIteration ? await conn.query(queryOrUrl) : await conn.queryMore(queryOrUrl);
         console.log(`Fetched ${queryResult.records.length} records`);
