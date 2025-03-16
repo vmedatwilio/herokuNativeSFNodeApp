@@ -32,7 +32,7 @@ app.post('/generatesummary', async (req, res) => {
         processSummary(accountId, accessToken, callbackUrl);
 });
 
-async function sendCallbackResponse(callbackUrl, accessToken, status, message) {
+async function sendCallbackResponse(callbackUrl='https://twlo--tofuheroku.sandbox.my.salesforce.com/services/apexrest/SummaryCallback', accessToken, status, message) {
     await axios.post(callbackUrl, 
         {
             status: "Completed",
