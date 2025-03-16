@@ -120,7 +120,7 @@ async function processSummary(accountId, accessToken, callbackUrl) {
             }
         }
 
-        const createmonthlysummariesinsalesforce = await createTimileSummarySalesforceRecords( finalSummary,accountId,'Monthly');
+        const createmonthlysummariesinsalesforce = await createTimileSummarySalesforceRecords(conn, finalSummary,accountId,'Monthly');
 
         const Quarterlysummary = await generateSummary(finalSummary,openai,assistant,
             `I have a JSON file containing monthly summaries of an account, where data is structured by year and then by month. Please generate a quarterly summary for each year while considering that the fiscal quarter starts in January. The output should be in JSON format, maintaining the same structure but grouped by quarters instead of months. Ensure the summary for each quarter appropriately consolidates the insights from the respective months.
@@ -135,7 +135,7 @@ async function processSummary(accountId, accessToken, callbackUrl) {
         const quaertersums=JSON.parse(Quarterlysummary);
         console.log(`Quarterlysummary received ${JSON.stringify(quaertersums)}`);
 
-        const createQuarterlysummariesinsalesforce = await createTimileSummarySalesforceRecords(quaertersums,accountId,'Quarterly');
+        const createQuarterlysummariesinsalesforce = await createTimileSummarySalesforceRecords(conn,quaertersums,accountId,'Quarterly');
         await sendCallbackResponse(callbackUrl, accessToken, "Success", "Summary Processed Successfully"); 
 
     } catch (error) {
@@ -145,7 +145,7 @@ async function processSummary(accountId, accessToken, callbackUrl) {
 
 }
 
-async function createTimileSummarySalesforceRecords( summaries={},parentId,summaryCategory) {
+async function createTimileSummarySalesforceRecords( conn,summaries={},parentId,summaryCategory) {
 
     // Create a unit of work that inserts multiple objects.
     let recordsToCreate =[];
@@ -195,7 +195,7 @@ async function createTimileSummarySalesforceRecords( summaries={},parentId,summa
     }
     catch (err) {
         const errorMessage = `Failed to insert record. Root Cause : ${err.message}`;
-        logger.error(errorMessage);
+        console.error(errorMessage);
         throw new Error(errorMessage);
     }
 }
