@@ -21,9 +21,17 @@ app.listen(PORT, () => {
 
 // STEP 1: Async Function to Process Summary
 app.post('/generatesummary', async (req, res) => {
-    const { accountId, accessToken, callbackUrl } = req.body;
+
+    const authHeader = req.headers["authorization"];
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+        return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    const accessToken = authHeader.split(" ")[1];
+
+    const { accountId, callbackUrl } = req.body;
         
-        if (!accountId || !accessToken || !callbackUrl) {
+        if (!accountId  || !callbackUrl || !accessToken) {
             return res.status(400).send({ error: "Missing required parameters" });
         }
         res.json({ status: 'processing', message: 'Summary is being generated' });
