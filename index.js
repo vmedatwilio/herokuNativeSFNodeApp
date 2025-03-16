@@ -4,10 +4,10 @@ const dotenv = require('dotenv');
 const { OpenAI } = require("openai");
 const fs = require("fs-extra");
 const path = require("path");
-const fetch = require('node-fetch');
 const axios = require("axios");
 dotenv.config();
 const app = express();
+const SF_LOGIN_URL = process.env.SF_LOGIN_URL;
 
 const PORT = process.env.PORT || 3000;
 
@@ -21,22 +21,17 @@ app.listen(PORT, () => {
 
 // STEP 1: Async Function to Process Summary
 app.post('/generatesummary', async (req, res) => {
-    console.log(req.body);
     const { accountId, accessToken, callbackUrl } = req.body;
-    console.log(accountId);
-    console.log(accessToken);
-    console.log(callbackUrl);    
+        
         if (!accountId || !accessToken || !callbackUrl) {
-            console.log('missing params'); 
             return res.status(400).send({ error: "Missing required parameters" });
         }
         res.json({ status: 'processing', message: 'Summary is being generated' });
-        await sendCallbackResponse(callbackUrl, accessToken, "processing", 'Summary is being generated');
-        await processSummary(accountId, accessToken, callbackUrl);
+        processSummary(accountId, accessToken, callbackUrl);
 });
 
-async function sendCallbackResponse(callbackUrl='https://twlo--tofuheroku.sandbox.my.salesforce.com/services/apexrest/SummaryCallback', accessToken, status, message) {
-    /*await axios.post(callbackUrl, 
+async function sendCallbackResponse(callbackUrl, accessToken, status, message) {
+    await axios.post(callbackUrl, 
         {
             status: "Completed",
             processResult: status,
@@ -48,7 +43,7 @@ async function sendCallbackResponse(callbackUrl='https://twlo--tofuheroku.sandbo
                 "Authorization": `Bearer ${accessToken}`
             }
         }
-    );*/
+    );
 }
 
 // Helper function to process summary generation asynchronously
@@ -57,19 +52,12 @@ async function processSummary(accountId, accessToken, callbackUrl) {
     try {
         
         const conn = new jsforce.Connection({
+            instanceUrl: SF_LOGIN_URL,
             accessToken: accessToken
         });
        
         let queryStr = `SELECT Description,ActivityDate FROM Task WHERE ActivityDate!=null and AccountId = '${accountId}' AND ActivityDate >= LAST_N_YEARS:4 ORDER BY ActivityDate DESC`;
         
-        await conn.query("SELECT Id FROM Organization", (err, result) => {
-            if (err) {
-                console.error("Query Failed. Invalid Connection:", err);
-            } else {
-                console.log("Valid Connection! Org ID:", result.records[0].Id);
-            }
-        });
-
         const groupedData = await fetchRecords(conn, queryStr);
 
         //Step 1: intiate Open AI
@@ -301,10 +289,9 @@ async function generateFile( activities = []) {
 // Function to fetch records recursively and group them
 async function fetchRecords(conn, queryOrUrl, groupedData = {}, isFirstIteration = true) {
     try {
-        console.log(`Fetching records...${queryOrUrl}`);
         // Query Salesforce (initial query or queryMore for pagination)
         const queryResult = isFirstIteration ? await conn.query(queryOrUrl) : await conn.queryMore(queryOrUrl);
-        console.log(`Fetched ${queryResult.records.length} records`);
+
         queryResult.records.forEach(activity => {
             const date = new Date(activity.ActivityDate); // Ensure this field exists in the query
             const year = date.getFullYear();
@@ -335,4 +322,3 @@ async function fetchRecords(conn, queryOrUrl, groupedData = {}, isFirstIteration
         throw error;
     }
 }
-
