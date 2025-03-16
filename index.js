@@ -23,8 +23,11 @@ app.listen(PORT, () => {
 app.post('/generatesummary', async (req, res) => {
     console.log(req.body);
     const { accountId, accessToken, callbackUrl } = req.body;
-        
+    console.log(accountId);
+    console.log(accessToken);
+    console.log(callbackUrl);    
         if (!accountId || !accessToken || !callbackUrl) {
+            console.log('missing params'); 
             return res.status(400).send({ error: "Missing required parameters" });
         }
         //res.json({ status: 'processing', message: 'Summary is being generated' });
