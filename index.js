@@ -27,7 +27,8 @@ app.post('/generatesummary', async (req, res) => {
         if (!accountId || !accessToken || !callbackUrl) {
             return res.status(400).send({ error: "Missing required parameters" });
         }
-        res.json({ status: 'processing', message: 'Summary is being generated' });
+        //res.json({ status: 'processing', message: 'Summary is being generated' });
+        await sendCallbackResponse(callbackUrl, accessToken, "processing", 'Summary is being generated');
         processSummary(accountId, accessToken, callbackUrl);
 });
 
