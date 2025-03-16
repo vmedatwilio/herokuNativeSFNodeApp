@@ -17,6 +17,7 @@ app.listen(PORT, () => {
 
 // STEP 1: Async Function to Process Summary
 app.post('/generatesummary', async (req, res) => {
+    console.log(req.body);
     const { accountId, accessToken, callbackUrl } = req.body;
         
         if (!accountId || !accessToken || !callbackUrl) {
