@@ -30,13 +30,13 @@ app.post('/generatesummary', async (req, res) => {
             console.log('missing params'); 
             return res.status(400).send({ error: "Missing required parameters" });
         }
-        //res.json({ status: 'processing', message: 'Summary is being generated' });
+        res.json({ status: 'processing', message: 'Summary is being generated' });
         await sendCallbackResponse(callbackUrl, accessToken, "processing", 'Summary is being generated');
-        processSummary(accountId, accessToken, callbackUrl);
+        await processSummary(accountId, accessToken, callbackUrl);
 });
 
 async function sendCallbackResponse(callbackUrl='https://twlo--tofuheroku.sandbox.my.salesforce.com/services/apexrest/SummaryCallback', accessToken, status, message) {
-    await axios.post(callbackUrl, 
+    /*await axios.post(callbackUrl, 
         {
             status: "Completed",
             processResult: status,
@@ -48,7 +48,7 @@ async function sendCallbackResponse(callbackUrl='https://twlo--tofuheroku.sandbo
                 "Authorization": `Bearer ${accessToken}`
             }
         }
-    );
+    );*/
 }
 
 // Helper function to process summary generation asynchronously
