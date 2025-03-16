@@ -5,6 +5,7 @@ const { OpenAI } = require("openai");
 const fs = require("fs-extra");
 const path = require("path");
 const fetch = require('node-fetch');
+const axios = require("axios");
 dotenv.config();
 const app = express();
 
@@ -31,14 +32,19 @@ app.post('/generatesummary', async (req, res) => {
 });
 
 async function sendCallbackResponse(callbackUrl, accessToken, status, message) {
-    await fetch(callbackUrl, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${accessToken}`
-        },
-        body: JSON.stringify({ status: "Completed", processResult: status, message }),
-    });
+    await axios.post(callbackUrl, 
+        {
+            status: "Completed",
+            processResult: status,
+            message
+        }, 
+        {
+            headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${accessToken}`
+            }
+        }
+    );
 }
 
 // Helper function to process summary generation asynchronously
