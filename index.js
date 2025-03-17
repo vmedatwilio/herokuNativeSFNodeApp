@@ -36,8 +36,8 @@ app.post('/generatesummary', async (req, res) => {
         }
         res.json({ status: 'processing', message: 'Summary is being generated' });
         let summaryRecordsMap={};
-        if(data.summaryMap != undefined) {
-            summaryRecordsMap = Object.entries(JSON.parse(data.summaryMap)).map(([key, value]) => ({ key, value }));
+        if(summaryMap != undefined) {
+            summaryRecordsMap = Object.entries(JSON.parse(summaryMap)).map(([key, value]) => ({ key, value }));
             //logger.info(`summaryRecordsMap: ${JSON.stringify(summaryRecordsMap)}`);
         }
 
