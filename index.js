@@ -173,6 +173,7 @@ async function createTimileSummarySalesforceRecords( conn,summaries={},parentId,
             //logger.info(`Summary:\n${summaries[year][month].summary}\n`);
             let FYQuartervalue=(summaryCategory=='Quarterly')?month:'';
             let motnhValue=(summaryCategory=='Monthly')?month:'';
+            let shortMonth = motnhValue.substring(0, 3);
             let summaryValue=summaries[year][month].summary;
             let startdate=summaries[year][month].startdate;
             let count=summaries[year][month].count;
