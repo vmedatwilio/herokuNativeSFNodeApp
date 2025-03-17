@@ -340,7 +340,7 @@ async function generateFile( activities = []) {
 async function fetchRecords(conn, queryOrUrl, groupedData = {}, isFirstIteration = true) {
     try {
         // Query Salesforce (initial query or queryMore for pagination)
-        console.log(queryOrUrl);
+        console.log('query is ::: '+queryOrUrl);
         const queryResult = isFirstIteration ? await conn.query(queryOrUrl) : await conn.queryMore(queryOrUrl);
 
         queryResult.records.forEach(activity => {
