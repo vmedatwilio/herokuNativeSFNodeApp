@@ -160,7 +160,7 @@ async function processSummary(accountId, accessToken, callbackUrl, userPrompt, q
             2. Format dates as ISO strings (YYYY-MM-DD)
             3. The "count" field must be a number, not a string
             4. The "startdate" should be the first day of the quarter (Jan 1, Apr 1, Jul 1, Oct 1)
-            5. Return only the raw JSON with no explanations or formatting
+            5. Return only the raw JSON with no explanations or formatting and no \```json``\` code blocks
             6. Ensure the JSON is minified (no extra spaces or line breaks)
             7. Each quarter should have exactly these three properties: summary, count, startdate
             `;
