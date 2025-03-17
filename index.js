@@ -137,14 +137,35 @@ async function processSummary(accountId, accessToken, callbackUrl, userPrompt, q
 
         const createmonthlysummariesinsalesforce = await createTimileSummarySalesforceRecords(conn, finalSummary,accountId,'Monthly',summaryRecordsMap);
 
-        const Quarterlysummary = await generateSummary(finalSummary,openai,assistant,
-            `I have a JSON file containing monthly summaries of an account, where data is structured by year and then by month. Please generate a quarterly summary for each year while considering that the fiscal quarter starts in January. The output should be in JSON format, maintaining the same structure but grouped by quarters instead of months. Ensure the summary for each quarter appropriately consolidates the insights from the respective months.
-            **Strict Requirements:**
-            1. **Summarize all three months into a single quarterly summary. Do not retain individual months as separate keys. The summary should combine key themes, tone, response trends, and follow-up actions from all months within the quarter.
-            2. **Return only the raw JSON object** with no explanations, Markdown formatting, or extra characters. Do not wrap the JSON in triple backticks or include "json" as a specifier.
-            3. JSON Structure should be: {"year": {"Q1": {"summary":"quarterly summary","count":"total count of all three months of that quarter from JSON file by summing up the count i.e 200","startdate":"start date of the Quarter"}, "Q2": {"summary":"quarterly summary","count":"total count of all three months of that quarter from JSON file by summing up the count ex:- 200 as total count","startdate":"start date of the Quarter"}, ...}}
-            4. **Ensure JSON is in minified format** (i.e., no extra spaces, line breaks, or special characters).
-            5. The response **must be directly usable with "JSON.parse(response)"**.`);
+        const quarterlyPrompt = `
+            Using the provided monthly summary data, generate a consolidated quarterly summary for each year. Each quarter should combine insights from its respective months (Q1: Jan-Mar, Q2: Apr-Jun, Q3: Jul-Sep, Q4: Oct-Dec).
+
+            Return a valid, parseable JSON object with this exact structure:
+            {
+            "YEAR": {
+                "Q1": {
+                "summary": "Consolidated quarterly summary text",
+                "count": NUMERIC_SUM_OF_MONTHLY_COUNTS,
+                "startdate": "YYYY-MM-DD"
+                },
+                "Q2": { ... },
+                "Q3": { ... },
+                "Q4": { ... }
+            },
+            "YEAR2": { ... }
+            }
+
+            Important requirements:
+            1. Ensure all property names use double quotes
+            2. Format dates as ISO strings (YYYY-MM-DD)
+            3. The "count" field must be a number, not a string
+            4. The "startdate" should be the first day of the quarter (Jan 1, Apr 1, Jul 1, Oct 1)
+            5. Return only the raw JSON with no explanations or formatting
+            6. Ensure the JSON is minified (no extra spaces or line breaks)
+            7. Each quarter should have exactly these three properties: summary, count, startdate
+            `;
+
+        const Quarterlysummary = await generateSummary(finalSummary,openai,assistant,quarterlyPrompt);
                           
 
         const quaertersums=JSON.parse(Quarterlysummary);
