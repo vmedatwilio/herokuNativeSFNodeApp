@@ -155,7 +155,7 @@ async function processSummary(accountId, accessToken, callbackUrl, userPrompt, q
                                     **Strict requirements:**
                                     1. Ensure all property names use double quotes
                                     2. Format dates as ISO strings (YYYY-MM-DD)
-                                    3. The "count" field must be a number, not a string
+                                    3. The "count" field must be a number, not a string, and only add the summary if count > 0 for a quarter, if it is 0 remove this quarter from json
                                     4. The "startdate" should be the first day of the quarter (Jan 1, Apr 1, Jul 1, Oct 1)
                                     5. Return only the raw JSON with no explanations or formatting
                                     6. Ensure the JSON is minified (no extra spaces or line breaks)
