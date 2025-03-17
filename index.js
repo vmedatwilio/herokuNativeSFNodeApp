@@ -373,4 +373,8 @@ async function fetchRecords(conn, queryOrUrl, groupedData = {}, isFirstIteration
         console.error(`Error fetching activities: ${error.message}`);
         throw error;
     }
+    function getValueByKey(records, searchKey) {
+        const record = records.find(item => item.key === searchKey);
+        return record ? record.value : null;
+    }
 }
