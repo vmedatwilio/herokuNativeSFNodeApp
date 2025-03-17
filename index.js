@@ -137,33 +137,33 @@ async function processSummary(accountId, accessToken, callbackUrl, userPrompt, q
 
         const createmonthlysummariesinsalesforce = await createTimileSummarySalesforceRecords(conn, finalSummary,accountId,'Monthly',summaryRecordsMap);
 
-        const quarterlyPrompt = `
-            Using the provided monthly summary data, generate a consolidated quarterly summary for each year. Each quarter should combine insights from its respective months (Q1: Jan-Mar, Q2: Apr-Jun, Q3: Jul-Sep, Q4: Oct-Dec).
+        const quarterlyPrompt = `Using the provided monthly summary data, generate a consolidated quarterly summary for each year. Each quarter should combine insights from its respective months (Q1: Jan-Mar, Q2: Apr-Jun, Q3: Jul-Sep, Q4: Oct-Dec).
+                                    Return a valid, parseable JSON object with this exact structure:
+                                    {
+                                    "YEAR": {
+                                        "Q1": {
+                                        "summary": "Consolidated quarterly summary text",
+                                        "count": NUMERIC_SUM_OF_MONTHLY_COUNTS,
+                                        "startdate": "YYYY-MM-DD"
+                                        },
+                                        "Q2": { ... },
+                                        "Q3": { ... },
+                                        "Q4": { ... }
+                                    },
+                                    "YEAR2": { ... }
+                                    }
+                                    **Strict requirements:**
+                                    1. Ensure all property names use double quotes
+                                    2. Format dates as ISO strings (YYYY-MM-DD)
+                                    3. The "count" field must be a number, not a string
+                                    4. The "startdate" should be the first day of the quarter (Jan 1, Apr 1, Jul 1, Oct 1)
+                                    5. Return only the raw JSON with no explanations or formatting
+                                    6. Ensure the JSON is minified (no extra spaces or line breaks)
+                                    7. Each quarter should have exactly these three properties: summary, count, startdate
+                                    8. **Ensure JSON is in minified format** (i.e., no extra spaces, line breaks, or special characters).
+                                    9. The response **must be directly usable with "JSON.parse(response)"**.
+                                    10.**Return only the raw JSON object** with no explanations, Markdown formatting, or extra characters. Do not wrap the JSON in triple backticks or include "json" as a specifier.`;
 
-            Return a valid, parseable JSON object with this exact structure:
-            {
-            "YEAR": {
-                "Q1": {
-                "summary": "Consolidated quarterly summary text",
-                "count": NUMERIC_SUM_OF_MONTHLY_COUNTS,
-                "startdate": "YYYY-MM-DD"
-                },
-                "Q2": { ... },
-                "Q3": { ... },
-                "Q4": { ... }
-            },
-            "YEAR2": { ... }
-            }
-
-            Important requirements:
-            1. Ensure all property names use double quotes
-            2. Format dates as ISO strings (YYYY-MM-DD)
-            3. The "count" field must be a number, not a string
-            4. The "startdate" should be the first day of the quarter (Jan 1, Apr 1, Jul 1, Oct 1)
-            5. Return only the raw JSON with no explanations or formatting and no \```json``\` code blocks
-            6. Ensure the JSON is minified (no extra spaces or line breaks)
-            7. Each quarter should have exactly these three properties: summary, count, startdate
-            `;
 
         const Quarterlysummary = await generateSummary(finalSummary,openai,assistant,quarterlyPrompt);
                           
