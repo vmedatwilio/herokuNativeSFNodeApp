@@ -183,7 +183,7 @@ async function createTimileSummarySalesforceRecords( conn,summaries={},parentId,
 
              // Push record to the list
              if(summaryRecordsMap!=undefined && summaryRecordsMap!=null && recId!=null && recId!=undefined) {
-                recordsToCreate.push({
+                recordsToUpdate.push({
                     Id: recId,
                     Parent_Id__c: parentId,
                     Month__c: motnhValue,
@@ -197,7 +197,7 @@ async function createTimileSummarySalesforceRecords( conn,summaries={},parentId,
                 });
              }
              else {
-                recordsToUpdate.push({
+                recordsToCreate.push({
                     Parent_Id__c: parentId,
                     Month__c: motnhValue,
                     Year__c: year,
