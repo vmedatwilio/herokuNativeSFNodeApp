@@ -29,7 +29,7 @@ app.post('/generatesummary', async (req, res) => {
 
     const accessToken = authHeader.split(" ")[1];
 
-    const { accountId, callbackUrl, userPrompt, queryText, summaryMap } = req.body;
+    const { accountId, callbackUrl, userPrompt,userPromptQtr, queryText, summaryMap } = req.body;
         
         if (!accountId  || !callbackUrl || !accessToken) {
             return res.status(400).send({ error: "Missing required parameters" });
@@ -41,7 +41,7 @@ app.post('/generatesummary', async (req, res) => {
             //logger.info(`summaryRecordsMap: ${JSON.stringify(summaryRecordsMap)}`);
         }
 
-        processSummary(accountId, accessToken, callbackUrl, userPrompt, queryText, summaryRecordsMap);
+        processSummary(accountId, accessToken, callbackUrl, userPrompt,  userPromptQtr, queryText, summaryRecordsMap);
 });
 
 async function sendCallbackResponse(accountId,callbackUrl, accessToken, status, message) {
@@ -62,7 +62,7 @@ async function sendCallbackResponse(accountId,callbackUrl, accessToken, status, 
 }
 
 // Helper function to process summary generation asynchronously
-async function processSummary(accountId, accessToken, callbackUrl, userPrompt, queryText, summaryRecordsMap) {
+async function processSummary(accountId, accessToken, callbackUrl, userPrompt,userPromptQtr, queryText, summaryRecordsMap) {
 
     try {
         
@@ -165,7 +165,7 @@ async function processSummary(accountId, accessToken, callbackUrl, userPrompt, q
                                     10.**Return only the raw JSON object** with no explanations, Markdown formatting, or extra characters. Do not wrap the JSON in triple backticks or include "json" as a specifier.`;
 
 
-        const Quarterlysummary = await generateSummary(finalSummary,openai,assistant,quarterlyPrompt);
+        const Quarterlysummary = await generateSummary(finalSummary,openai,assistant,userPromptQtr);
                           
 
         const quaertersums=JSON.parse(Quarterlysummary);
