@@ -29,18 +29,25 @@ app.post('/generatesummary', async (req, res) => {
 
     const accessToken = authHeader.split(" ")[1];
 
-    const { accountId, callbackUrl } = req.body;
+    const { accountId, callbackUrl, userPrompt, queryText, summaryMap } = req.body;
         
         if (!accountId  || !callbackUrl || !accessToken) {
             return res.status(400).send({ error: "Missing required parameters" });
         }
         res.json({ status: 'processing', message: 'Summary is being generated' });
-        processSummary(accountId, accessToken, callbackUrl);
+        let summaryRecordsMap={};
+        if(data.summaryMap != undefined) {
+            summaryRecordsMap = Object.entries(JSON.parse(data.summaryMap)).map(([key, value]) => ({ key, value }));
+            //logger.info(`summaryRecordsMap: ${JSON.stringify(summaryRecordsMap)}`);
+        }
+
+        processSummary(accountId, accessToken, callbackUrl, userPrompt, queryText, summaryRecordsMap);
 });
 
-async function sendCallbackResponse(callbackUrl, accessToken, status, message) {
+async function sendCallbackResponse(accountId,callbackUrl, accessToken, status, message) {
     await axios.post(callbackUrl, 
         {
+            accountId : accountId,
             status: "Completed",
             processResult: status,
             message
@@ -55,7 +62,7 @@ async function sendCallbackResponse(callbackUrl, accessToken, status, message) {
 }
 
 // Helper function to process summary generation asynchronously
-async function processSummary(accountId, accessToken, callbackUrl) {
+async function processSummary(accountId, accessToken, callbackUrl, userPrompt, queryText, summaryRecordsMap) {
 
     try {
         
@@ -64,9 +71,9 @@ async function processSummary(accountId, accessToken, callbackUrl) {
             accessToken: accessToken
         });
        
-        let queryStr = `SELECT Description,ActivityDate FROM Task WHERE ActivityDate!=null and AccountId = '${accountId}' AND ActivityDate >= LAST_N_YEARS:4 ORDER BY ActivityDate DESC`;
+        //let queryStr = `SELECT Description,ActivityDate FROM Task WHERE ActivityDate!=null and AccountId = '${accountId}' AND ActivityDate >= LAST_N_YEARS:4 ORDER BY ActivityDate DESC`;
         
-        const groupedData = await fetchRecords(conn, queryStr);
+        const groupedData = await fetchRecords(conn, queryText);
 
         //Step 1: intiate Open AI
         const openai = new OpenAI({
@@ -98,18 +105,18 @@ async function processSummary(accountId, accessToken, callbackUrl) {
             december: 11
         };
 
-        let userPrompt = `You are an AI assistant generating structured sales activity summaries for Salesforce.
-                            ### **Instructions**
-                            - Analyze the provided sales activity data and generate a **monthly summary {{YearMonth}}**.
-                            - Extract the **key themes of customer interactions** based on email content.
-                            - Describe the **tone and purpose** of the interactions.
-                            - Identify any **response trends** and suggest relevant **follow-up actions**.
-                            - Format the summary in **HTML** suitable for a Salesforce **Rich Text Area field**.
-                            - Return **only the formatted summary** without explanations.
-                            ### **Formatting Instructions**
-                            - **Use only these HTML tags** (<b>, <br>, <ul><li>) for structured formatting.
-                            - **Do not include explanations**—return only the final HTML summary.
-                            - **Ensure readability and clarity.**`;
+        // let userPrompt = `You are an AI assistant generating structured sales activity summaries for Salesforce.
+        //                     ### **Instructions**
+        //                     - Analyze the provided sales activity data and generate a **monthly summary {{YearMonth}}**.
+        //                     - Extract the **key themes of customer interactions** based on email content.
+        //                     - Describe the **tone and purpose** of the interactions.
+        //                     - Identify any **response trends** and suggest relevant **follow-up actions**.
+        //                     - Format the summary in **HTML** suitable for a Salesforce **Rich Text Area field**.
+        //                     - Return **only the formatted summary** without explanations.
+        //                     ### **Formatting Instructions**
+        //                     - **Use only these HTML tags** (<b>, <br>, <ul><li>) for structured formatting.
+        //                     - **Do not include explanations**—return only the final HTML summary.
+        //                     - **Ensure readability and clarity.**`;
 
         for (const year in groupedData) {
             console.log(`Year: ${year}`);
@@ -128,7 +135,7 @@ async function processSummary(accountId, accessToken, callbackUrl) {
             }
         }
 
-        const createmonthlysummariesinsalesforce = await createTimileSummarySalesforceRecords(conn, finalSummary,accountId,'Monthly');
+        const createmonthlysummariesinsalesforce = await createTimileSummarySalesforceRecords(conn, finalSummary,accountId,'Monthly',summaryRecordsMap);
 
         const Quarterlysummary = await generateSummary(finalSummary,openai,assistant,
             `I have a JSON file containing monthly summaries of an account, where data is structured by year and then by month. Please generate a quarterly summary for each year while considering that the fiscal quarter starts in January. The output should be in JSON format, maintaining the same structure but grouped by quarters instead of months. Ensure the summary for each quarter appropriately consolidates the insights from the respective months.
@@ -143,20 +150,21 @@ async function processSummary(accountId, accessToken, callbackUrl) {
         const quaertersums=JSON.parse(Quarterlysummary);
         console.log(`Quarterlysummary received ${JSON.stringify(quaertersums)}`);
 
-        const createQuarterlysummariesinsalesforce = await createTimileSummarySalesforceRecords(conn,quaertersums,accountId,'Quarterly');
-        await sendCallbackResponse(callbackUrl, accessToken, "Success", "Summary Processed Successfully"); 
+        const createQuarterlysummariesinsalesforce = await createTimileSummarySalesforceRecords(conn,quaertersums,accountId,'Quarterly',summaryRecordsMap);
+        await sendCallbackResponse(accountId,callbackUrl, accessToken, "Success", "Summary Processed Successfully"); 
 
     } catch (error) {
         console.error(error);
-        await sendCallbackResponse(callbackUrl, accessToken, "Failed", error.message);
+        await sendCallbackResponse(accountId,callbackUrl, accessToken, "Failed", error.message);
     }
 
 }
 
-async function createTimileSummarySalesforceRecords( conn,summaries={},parentId,summaryCategory) {
+async function createTimileSummarySalesforceRecords( conn,summaries={},parentId,summaryCategory,summaryRecordsMap) {
 
     // Create a unit of work that inserts multiple objects.
     let recordsToCreate =[];
+    let recordsToUpdate =[];
         
     for (const year in summaries) {
         //logger.info(`Year: ${year}`);
@@ -169,18 +177,37 @@ async function createTimileSummarySalesforceRecords( conn,summaries={},parentId,
             let startdate=summaries[year][month].startdate;
             let count=summaries[year][month].count;
 
+            let summaryMapKey = (summaryCategory=='Quarterly')? FYQuartervalue + ' ' + year : shortMonth + ' ' + year;
+            let recId = getValueByKey(summaryRecordsMap,summaryMapKey);
+
              // Push record to the list
-             recordsToCreate.push({
-                Parent_Id__c: parentId,
-                Month__c: motnhValue,
-                Year__c: year,
-                Summary_Category__c: summaryCategory,
-                Summary_Details__c: summaryValue,
-                FY_Quarter__c: FYQuartervalue,
-                Month_Date__c: startdate,
-                Number_of_Records__c: count,
-                Account__c: parentId
-            });
+             if(summaryRecordsMap!=undefined && summaryRecordsMap!=null && recId!=null && recId!=undefined) {
+                recordsToCreate.push({
+                    Id: recId,
+                    Parent_Id__c: parentId,
+                    Month__c: motnhValue,
+                    Year__c: year,
+                    Summary_Category__c: summaryCategory,
+                    Summary_Details__c: summaryValue,
+                    FY_Quarter__c: FYQuartervalue,
+                    Month_Date__c: startdate,
+                    Number_of_Records__c: count,
+                    Account__c: parentId
+                });
+             }
+             else {
+                recordsToUpdate.push({
+                    Parent_Id__c: parentId,
+                    Month__c: motnhValue,
+                    Year__c: year,
+                    Summary_Category__c: summaryCategory,
+                    Summary_Details__c: summaryValue,
+                    FY_Quarter__c: FYQuartervalue,
+                    Month_Date__c: startdate,
+                    Number_of_Records__c: count,
+                    Account__c: parentId
+                });
+             }
         }
     }
     try {
@@ -200,9 +227,24 @@ async function createTimileSummarySalesforceRecords( conn,summaries={},parentId,
         } else {
             console.log("No records to insert.");
         }
+        if (recordsToUpdate.length > 0) {
+            // Insert all records at once
+            const result = await conn.sobject("Timeline_Summary__c").update(recordsToUpdate);
+
+            // Handle response
+            result.forEach((res, index) => {
+                if (res.success) {
+                    console.log(`Record ${index + 1} Updated with Id: ${res.id}`);
+                } else {
+                    console.error(`Error updating record ${index + 1}:`, res.errors);
+                }
+            });
+        } else {
+            console.log("No records to update.");
+        }
     }
     catch (err) {
-        const errorMessage = `Failed to insert record. Root Cause : ${err.message}`;
+        const errorMessage = `Failed to update record. Root Cause : ${err.message}`;
         console.error(errorMessage);
         throw new Error(errorMessage);
     }
