@@ -29,7 +29,7 @@ app.post('/generatesummary', async (req, res) => {
 
     const accessToken = authHeader.split(" ")[1];
 
-    const { accountId, callbackUrl, userPrompt,userPromptQtr, queryText, summaryMap } = req.body;
+    const { accountId, callbackUrl, userPrompt,userPromptQtr, queryText, summaryMap, loggedinUserId } = req.body;
         
         if (!accountId  || !callbackUrl || !accessToken) {
             return res.status(400).send({ error: "Missing required parameters" });
@@ -41,13 +41,14 @@ app.post('/generatesummary', async (req, res) => {
             //logger.info(`summaryRecordsMap: ${JSON.stringify(summaryRecordsMap)}`);
         }
 
-        processSummary(accountId, accessToken, callbackUrl, userPrompt,  userPromptQtr, queryText, summaryRecordsMap);
+        processSummary(accountId, accessToken, callbackUrl, userPrompt,  userPromptQtr, queryText, summaryRecordsMap, loggedinUserId);
 });
 
-async function sendCallbackResponse(accountId,callbackUrl, accessToken, status, message) {
+async function sendCallbackResponse(accountId,callbackUrl,loggedinUserId, accessToken, status, message) {
     await axios.post(callbackUrl, 
         {
             accountId : accountId,
+            loggedinUserId : loggedinUserId,
             status: "Completed",
             processResult: status,
             message
@@ -62,7 +63,7 @@ async function sendCallbackResponse(accountId,callbackUrl, accessToken, status, 
 }
 
 // Helper function to process summary generation asynchronously
-async function processSummary(accountId, accessToken, callbackUrl, userPrompt,userPromptQtr, queryText, summaryRecordsMap) {
+async function processSummary(accountId, accessToken, callbackUrl, userPrompt,userPromptQtr, queryText, summaryRecordsMap, loggedinUserId) {
 
     try {
         
@@ -172,11 +173,11 @@ async function processSummary(accountId, accessToken, callbackUrl, userPrompt,us
         console.log(`Quarterlysummary received ${JSON.stringify(quaertersums)}`);
 
         const createQuarterlysummariesinsalesforce = await createTimileSummarySalesforceRecords(conn,quaertersums,accountId,'Quarterly',summaryRecordsMap);
-        await sendCallbackResponse(accountId,callbackUrl, accessToken, "Success", "Summary Processed Successfully"); 
+        await sendCallbackResponse(accountId,callbackUrl,loggedinUserId, accessToken, "Success", "Summary Processed Successfully"); 
 
     } catch (error) {
         console.error(error);
-        await sendCallbackResponse(accountId,callbackUrl, accessToken, "Failed", error.message);
+        await sendCallbackResponse(accountId,callbackUrl,loggedinUserId, accessToken, "Failed", error.message);
     }
 
 }
