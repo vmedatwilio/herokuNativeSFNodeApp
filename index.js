@@ -28,7 +28,7 @@ app.post('/generatesummary', async (req, res) => {
     }
 
     const accessToken = authHeader.split(" ")[1];
-
+    //console.log(accessToken);
     const { accountId, callbackUrl, userPrompt,userPromptQtr, queryText, summaryMap, loggedinUserId } = req.body;
         
         if (!accountId  || !callbackUrl || !accessToken) {
@@ -36,15 +36,15 @@ app.post('/generatesummary', async (req, res) => {
         }
         res.json({ status: 'processing', message: 'Summary is being generated' });
         let summaryRecordsMap={};
-        if(summaryMap != undefined) {
+        if(summaryMap != undefined && summaryMap != null && summaryMap != '') {
             summaryRecordsMap = Object.entries(JSON.parse(summaryMap)).map(([key, value]) => ({ key, value }));
-            //logger.info(`summaryRecordsMap: ${JSON.stringify(summaryRecordsMap)}`);
         }
 
-        processSummary(accountId, accessToken, callbackUrl, userPrompt,  userPromptQtr, queryText, summaryRecordsMap, loggedinUserId);
+        processSummary(accountId, accessToken, callbackUrl, userPrompt,  userPromptQtr, queryText, (summaryMap != undefined && summaryMap != null && summaryMap != '') ? summaryRecordsMap : null, loggedinUserId);
 });
 
 async function sendCallbackResponse(accountId,callbackUrl,loggedinUserId, accessToken, status, message) {
+    console.log('callback message ::: '+ message);
     await axios.post(callbackUrl, 
         {
             accountId : accountId,
@@ -201,10 +201,10 @@ async function createTimileSummarySalesforceRecords( conn,summaries={},parentId,
             let count=summaries[year][month].count;
 
             let summaryMapKey = (summaryCategory=='Quarterly')? FYQuartervalue + ' ' + year : shortMonth + ' ' + year;
-            let recId = getValueByKey(summaryRecordsMap,summaryMapKey);
+            let recId = (summaryRecordsMap!=null) ? getValueByKey(summaryRecordsMap,summaryMapKey):null;
 
              // Push record to the list
-             if(summaryRecordsMap!=undefined && summaryRecordsMap!=null && recId!=null && recId!=undefined) {
+             if(recId!=null && recId!=undefined) {
                 recordsToUpdate.push({
                     Id: recId,
                     Parent_Id__c: parentId,
@@ -382,7 +382,13 @@ async function fetchRecords(conn, queryOrUrl, groupedData = {}, isFirstIteration
                 groupedData[year].push(monthEntry);
             }
 
-            monthEntry[month].push(activity.Description || "No Description"); // Change field if needed
+            //monthEntry[month].push(activity.Description || "No Description"); // Change field if needed
+
+            monthEntry[month].push({
+                Id: activity.Id,
+                Description: activity.Description || "No Description",
+                Subject: activity.Subject || "No Subject"
+            });
         });
 
         // If there are more records, fetch them recursively
