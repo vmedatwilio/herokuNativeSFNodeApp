@@ -11,6 +11,207 @@ const SF_LOGIN_URL = process.env.SF_LOGIN_URL;
 
 const PORT = process.env.PORT || 3000;
 
+const functions = [
+
+    {
+        "name": "generate_monthly_activity_summary",
+        "description": "Sales activity summary generator with structured insights and categorization",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "summary": {
+              "type": "string",
+              "description": "Descriptive summary of all activities grouped monthly based on activity date, make sure to include activties only with the current month activitydate, highlighting key trends and patterns, should be strictly in HTML rich text format having one header (strictly only within <h1> tag no bold) 'Sales Activity Summary for {Month} {Year}' and multiple bullet points containing key insights"
+            },
+            "activityMapping": {
+              "type": "object",
+              "description": "Detailed activity summary and categorization with strategic mapping",
+              "properties": {
+                "Key Themes of Customer Interaction": {
+                  "type": "array",
+                  "description": "Strategic insights into the major themes of customer communication patterns with deep, actionable subcategories, analyze the provided prompt for detailed requirement",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "Summary": { "type": "string", "description": "Descriptive summary of the activities coming under this criteria" },
+                      "ActivityList": {
+                        "type": "array",
+                        "description": "List of activities belonging to this header that has activity date in this month",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "Id": { "type": "string", "description": "Salesforce Id of the specific task belonging to this header" },
+                            "LinkText": { "type": "string", "description": "Combination of 'Activity Date' : 'Short Description of the activity description'" }
+                          },
+                          "required": ["Id", "LinkText"],
+                          "additionalProperties": false
+                        }
+                      }
+                    },
+                    "required": ["Summary", "ActivityList"],
+                    "additionalProperties": false
+                  }
+                },
+                "Tone and Purpose of Interaction": {
+                  "type": "array",
+                  "description": "Nuanced communication dynamics and strategic intent analysis, analyze the provided prompt for detailed requirement",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "Summary": { "type": "string", "description": "Descriptive summary of the activities coming under this criteria" },
+                      "ActivityList": {
+                        "type": "array",
+                        "description": "List of activities belonging to this header that has activity date in this month",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "Id": { "type": "string", "description": "Salesforce Id of the specific task belonging to this header" },
+                            "LinkText": { "type": "string", "description": "Combination of 'Activity Date' : 'Short Description of the activity description'" }
+                          },
+                          "required": ["Id", "LinkText"],
+                          "additionalProperties": false
+                        }
+                      }
+                    },
+                    "required": ["Summary", "ActivityList"],
+                    "additionalProperties": false
+                  }
+                },
+                "Recommended Action and Next Steps": {
+                  "type": "array",
+                  "description": "Forward-looking strategic recommendations with executable guidance, analyze the provided prompt for detailed requirement",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "Summary": { "type": "string", "description": "Descriptive summary of the activities coming under this criteria" },
+                      "ActivityList": {
+                        "type": "array",
+                        "description": "List of activities belonging to this header that has activity date in this month",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "Id": { "type": "string", "description": "Salesforce Id of the specific task belonging to this header" },
+                            "LinkText": { "type": "string", "description": "Combination of 'Activity Date' : 'Short Description of the activity description'" }
+                          },
+                          "required": ["Id", "LinkText"],
+                          "additionalProperties": false
+                        }
+                      }
+                    },
+                    "required": ["Summary", "ActivityList"],
+                    "additionalProperties": false
+                  }
+                }
+              },
+              "required": ["Key Themes of Customer Interaction", "Tone and Purpose of Interaction", "Recommended Action and Next Steps"],
+              "additionalProperties": false
+            },
+            "activityCount": {
+              "type": "integer",
+              "description": "Total number of incoming sales activities for the month based on activity Date in JSON input file"
+            }
+          },
+          "required": ["summary", "activityMapping", "activityCount"],
+          "additionalProperties": false
+        },
+        "strict": true
+      },
+      {
+        "name": "generate_quarterly_activity_summary",
+        "description": "Sales activity summary generator structured dynamically by year and quarter, including key insights and activity categorization",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "yearlySummary": {
+              "type": "array",
+              "description": "Structured summary of activities grouped dynamically by year and quarter",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "year": {
+                    "type": "integer",
+                    "description": "Year of the sales activity summary"
+                  },
+                  "quarters": {
+                    "type": "array",
+                    "description": "List of quarterly summaries for the given year",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "quarter": {
+                          "type": "string",
+                          "description": "Quarter identifier (e.g., Q1, Q2, Q3, Q4), Strictly all quarters of a year where activities are present should be present"
+                        },
+                        "summary": {
+                          "type": "string",
+                          "description": "Descriptive summary of activities for the quarter, in HTML format, with header  (strictly only within <h1> tag no bold) 'Sales Activity Summary for {Quarter} {Year}' and key insights as bullet points"
+                        },
+                        "activityMapping": {
+                          "type": "array",
+                          "description": "List of categorized activities with descriptions and related tasks",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "category": {
+                                "type": "string",
+                                "description": "Category of activities (e.g., Key Themes of Customer Interaction, Tone and Purpose of Interaction, Recommended Action and Next Steps)"
+                              },
+                              "summary": {
+                                "type": "string",
+                                "description": "Descriptive summary of activities in this category"
+                              },
+                              "activityList": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "id": { "type": "string", "description": "Salesforce ID of the task" },
+                                    "linkText": { "type": "string", "description": "'Activity Date' : 'Short Description'" }
+                                  },
+                                  "required": ["id", "linkText"],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": ["category", "summary", "activityList"],
+                            "additionalProperties": false
+                          }
+                        },
+                        "activityCount": {
+                          "type": "integer",
+                          "description": "Total number of sales activities for the quarter"
+                        },
+                        "count": {
+                          "type": "integer",
+                          "description": "Numeric sum of activities recorded in the quarter"
+                        },
+                        "startdate": {
+                          "type": "string",
+                          "description": "Start date of the quarter in YYYY-MM-DD format"
+                        }
+                      },
+                      "required": ["quarter", "summary", "activityMapping", "activityCount", "count", "startdate"],
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "required": ["year", "quarters"],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": ["yearlySummary"],
+          "additionalProperties": false
+        },
+        "strict": true
+      }
+      
+      
+      
+      
+      
+  ];
+  
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -29,7 +230,7 @@ app.post('/generatesummary', async (req, res) => {
 
     const accessToken = authHeader.split(" ")[1];
     //console.log(accessToken);
-    const { accountId, callbackUrl, userPrompt,userPromptQtr, queryText, summaryMap, loggedinUserId } = req.body;
+    const { accountId, callbackUrl, userPrompt,userPromptQtr, queryText, summaryMap, loggedinUserId,qtrJSON,monthJSON } = req.body;
         
         if (!accountId  || !callbackUrl || !accessToken) {
             return res.status(400).send({ error: "Missing required parameters" });
@@ -40,7 +241,7 @@ app.post('/generatesummary', async (req, res) => {
             summaryRecordsMap = Object.entries(JSON.parse(summaryMap)).map(([key, value]) => ({ key, value }));
         }
 
-        processSummary(accountId, accessToken, callbackUrl, userPrompt,  userPromptQtr, queryText, (summaryMap != undefined && summaryMap != null && summaryMap != '') ? summaryRecordsMap : null, loggedinUserId);
+        processSummary(accountId, accessToken, callbackUrl, userPrompt,  userPromptQtr, queryText, (summaryMap != undefined && summaryMap != null && summaryMap != '') ? summaryRecordsMap : null, loggedinUserId,qtrJSON,monthJSON);
 });
 
 async function sendCallbackResponse(accountId,callbackUrl,loggedinUserId, accessToken, status, message) {
@@ -63,7 +264,7 @@ async function sendCallbackResponse(accountId,callbackUrl,loggedinUserId, access
 }
 
 // Helper function to process summary generation asynchronously
-async function processSummary(accountId, accessToken, callbackUrl, userPrompt,userPromptQtr, queryText, summaryRecordsMap, loggedinUserId) {
+async function processSummary(accountId, accessToken, callbackUrl, userPrompt,userPromptQtr, queryText, summaryRecordsMap, loggedinUserId,qtrJSON,monthJSON) {
 
     try {
         
@@ -84,9 +285,9 @@ async function processSummary(accountId, accessToken, callbackUrl, userPrompt,us
         // Step 2: Create an Assistant (if not created before)
         const assistant = await openai.beta.assistants.create({
             name: "Salesforce Summarizer",
-            instructions: "You are an AI that summarizes Salesforce activity data.",
-            tools: [{ type: "file_search" }], // Allows using files
-            model: "gpt-4-turbo",
+            instructions: "You are an AI that summarizes Salesforce activity data into monthly/quarterly report based on the function and prompt provided",
+            tools: [{ type: "file_search" },{type:"function" , "function" :qtrJSON!= undefined ? JSON.parse(qtrJSON) : functions[1]},{type:"function" , "function" : monthJSON!= undefined ? JSON.parse(monthJSON) : functions[0]}], // Allows using files
+            model: "gpt-4o",
         });
 
         const finalSummary = {};
@@ -131,46 +332,49 @@ async function processSummary(accountId, accessToken, callbackUrl, userPrompt,us
                     const monthIndex = monthMap[month.toLowerCase()];
                     const startdate = new Date(year, monthIndex, 1);
                     const summary = await generateSummary(tmpactivites,openai,assistant,userPrompt.replace('{{YearMonth}}',`${month} ${year}`));
-                    finalSummary[year][month] = {"summary":summary,"count":tmpactivites.length,"startdate":startdate};
+                    finalSummary[year][month] = {"summary":JSON.stringify(summary),"count":tmpactivites.length,"startdate":startdate};
                 }
             }
         }
 
         const createmonthlysummariesinsalesforce = await createTimileSummarySalesforceRecords(conn, finalSummary,accountId,'Monthly',summaryRecordsMap);
 
-        const quarterlyPrompt = `Using the provided monthly summary data, generate a consolidated quarterly summary for each year. Each quarter should combine insights from its respective months (Q1: Jan-Mar, Q2: Apr-Jun, Q3: Jul-Sep, Q4: Oct-Dec).
-                                    Return a valid, parseable JSON object with this exact structure:
-                                    {
-                                    "YEAR": {
-                                        "Q1": {
-                                        "summary": "Consolidated quarterly summary text",
-                                        "count": NUMERIC_SUM_OF_MONTHLY_COUNTS,
-                                        "startdate": "YYYY-MM-DD"
-                                        },
-                                        "Q2": { ... },
-                                        "Q3": { ... },
-                                        "Q4": { ... }
-                                    },
-                                    "YEAR2": { ... }
-                                    }
-                                    **Strict requirements:**
-                                    1. Ensure all property names use double quotes
-                                    2. Format dates as ISO strings (YYYY-MM-DD)
-                                    3. The "count" field must be a number, not a string, and only add the summary if count > 0 for a quarter, if it is 0 remove this quarter from json
-                                    4. The "startdate" should be the first day of the quarter (Jan 1, Apr 1, Jul 1, Oct 1)
-                                    5. Return only the raw JSON with no explanations or formatting
-                                    6. Ensure the JSON is minified (no extra spaces or line breaks)
-                                    7. Each quarter should have exactly these three properties: summary, count, startdate
-                                    8. **Ensure JSON is in minified format** (i.e., no extra spaces, line breaks, or special characters).
-                                    9. The response **must be directly usable with "JSON.parse(response)"**.
-                                    10.**Return only the raw JSON object** with no explanations, Markdown formatting, or extra characters. Do not wrap the JSON in triple backticks or include "json" as a specifier.`;
+        // const quarterlyPrompt = `Using the provided monthly summary data, generate a consolidated quarterly summary for each year. Each quarter should combine insights from its respective months (Q1: Jan-Mar, Q2: Apr-Jun, Q3: Jul-Sep, Q4: Oct-Dec).
+        //                             Return a valid, parseable JSON object with this exact structure:
+        //                             {
+        //                             "YEAR": {
+        //                                 "Q1": {
+        //                                 "summary": "Consolidated quarterly summary text",
+        //                                 "count": NUMERIC_SUM_OF_MONTHLY_COUNTS,
+        //                                 "startdate": "YYYY-MM-DD"
+        //                                 },
+        //                                 "Q2": { ... },
+        //                                 "Q3": { ... },
+        //                                 "Q4": { ... }
+        //                             },
+        //                             "YEAR2": { ... }
+        //                             }
+        //                             **Strict requirements:**
+        //                             1. Ensure all property names use double quotes
+        //                             2. Format dates as ISO strings (YYYY-MM-DD)
+        //                             3. The "count" field must be a number, not a string, and only add the summary if count > 0 for a quarter, if it is 0 remove this quarter from json
+        //                             4. The "startdate" should be the first day of the quarter (Jan 1, Apr 1, Jul 1, Oct 1)
+        //                             5. Return only the raw JSON with no explanations or formatting
+        //                             6. Ensure the JSON is minified (no extra spaces or line breaks)
+        //                             7. Each quarter should have exactly these three properties: summary, count, startdate
+        //                             8. **Ensure JSON is in minified format** (i.e., no extra spaces, line breaks, or special characters).
+        //                             9. The response **must be directly usable with "JSON.parse(response)"**.
+        //                             10.**Return only the raw JSON object** with no explanations, Markdown formatting, or extra characters. Do not wrap the JSON in triple backticks or include "json" as a specifier.`;
 
 
         const Quarterlysummary = await generateSummary(finalSummary,openai,assistant,userPromptQtr);
                           
 
-        const quaertersums=JSON.parse(Quarterlysummary);
-        console.log(`Quarterlysummary received ${JSON.stringify(quaertersums)}`);
+        //const quaertersums= Quarterlysummary;
+        console.log(`Quarterlysummary received ${JSON.stringify(Quarterlysummary)}`);
+        // Transform the structure to match the required format
+        const quaertersums = transformStructure(Quarterlysummary);
+        console.log(`Transformed Quarterlysummary: ${JSON.stringify(quaertersums)}`);
 
         const createQuarterlysummariesinsalesforce = await createTimileSummarySalesforceRecords(conn,quaertersums,accountId,'Quarterly',summaryRecordsMap);
         await sendCallbackResponse(accountId,callbackUrl,loggedinUserId, accessToken, "Success", "Summary Processed Successfully"); 
@@ -196,7 +400,8 @@ async function createTimileSummarySalesforceRecords( conn,summaries={},parentId,
             let FYQuartervalue=(summaryCategory=='Quarterly')?month:'';
             let motnhValue=(summaryCategory=='Monthly')?month:'';
             let shortMonth = motnhValue.substring(0, 3);
-            let summaryValue=summaries[year][month].summary;
+            let summaryValue=JSON.parse(summaries[year][month].summary).summary;
+            let summaryJSON=summaries[year][month].summary;
             let startdate=summaries[year][month].startdate;
             let count=summaries[year][month].count;
 
@@ -211,6 +416,7 @@ async function createTimileSummarySalesforceRecords( conn,summaries={},parentId,
                     Month__c: motnhValue,
                     Year__c: year,
                     Summary_Category__c: summaryCategory,
+                    Summary__c: summaryJSON,
                     Summary_Details__c: summaryValue,
                     FY_Quarter__c: FYQuartervalue,
                     Month_Date__c: startdate,
@@ -225,6 +431,7 @@ async function createTimileSummarySalesforceRecords( conn,summaries={},parentId,
                     Year__c: year,
                     Summary_Category__c: summaryCategory,
                     Summary_Details__c: summaryValue,
+                    Summary__c: summaryJSON,
                     FY_Quarter__c: FYQuartervalue,
                     Month_Date__c: startdate,
                     Number_of_Records__c: count,
@@ -314,24 +521,29 @@ async function generateSummary(activities, openai,assistant,userPrompt)
         });
             
         console.log(`Run started: ${run.id}`);
-
+        //console.log(`Run JSON: ${JSON.stringify(run)}`);
         const messages = await openai.beta.threads.messages.list(thread.id, {
             run_id: run.id,
           });
-
           // Log the full response structure
-          console.log(`OpenAI msg content Response: ${JSON.stringify(messages, null, 2)}`);
+          //console.log(`OpenAI msg content Response: ${JSON.stringify(messages, null, 2)}`);
+        console.log(`tool_calls: ${JSON.stringify(run.required_action.submit_tool_outputs.tool_calls)}`);
+        console.log(`tool_calls arg: ${JSON.stringify(run.required_action.submit_tool_outputs.tool_calls[0].function.arguments)}`);
 
-          const summary = messages.data[0].content[0].text.value;
-          console.log(`Summary received ${JSON.stringify(messages.data[0].content[0])}`);
-        
-          console.log(`Summary received ${summary}`);
+        const summaryObj = JSON.parse(run.required_action.submit_tool_outputs.tool_calls[0].function.arguments);
+        // console.log("summaryObj :", summaryObj);
+        // console.log("Type of summaryObj:", typeof summaryObj);
+        // console.log("Keys in summaryObj:", Object.keys(summaryObj));
+        // const summary = summaryObj.summary;
+        // console.log("summary :", summary);
+        // console.log("ActivityCount :", summaryObj.activityCount);
+        // console.log("activityMapping :", summaryObj.activityMapping);
 
-          const file = await openai.files.del(fileId);
+        const file = await openai.files.del(fileId);
 
           console.log(file);
 
-        return summary.replace(/(\[\[\d+†source\]\]|\【\d+:\d+†source\】)/g, '');
+        return summaryObj;
     } 
     catch (error) 
     {
@@ -387,7 +599,8 @@ async function fetchRecords(conn, queryOrUrl, groupedData = {}, isFirstIteration
             monthEntry[month].push({
                 Id: activity.Id,
                 Description: activity.Description || "No Description",
-                Subject: activity.Subject || "No Subject"
+                Subject: activity.Subject || "No Subject",
+                ActivityDate: activity.ActivityDate || "No Activity Date"
             });
         });
 
@@ -407,3 +620,24 @@ function getValueByKey(records, searchKey) {
     const record = records.find(item => item.key === searchKey);
     return record ? record.value : null;
 }
+
+function transformStructure(oldJson) {
+    const result = {};
+    
+    oldJson.yearlySummary.forEach(yearData => {
+      const year = yearData.year;
+      result[year] = {};
+      
+      yearData.quarters.forEach(quarterData => {
+        result[year][quarterData.quarter] = {
+          summary: JSON.stringify(quarterData),
+          count: quarterData.activityCount,
+          startdate: quarterData.startdate
+        };
+      });
+    });
+    
+    return result;
+  }
+
+
