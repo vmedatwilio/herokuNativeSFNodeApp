@@ -518,7 +518,9 @@ async function generateSummary(activities, openai,assistant,userPrompt)
         // Step 6: Run the Assistant
         const run = await openai.beta.threads.runs.createAndPoll(thread.id, {
             assistant_id: assistant.id,
-            tool_choice: "required"
+            tool_choice: "required",
+            instructions: "You MUST call a function to process this request. Do NOT return text responses.",
+            temperature: 0
         });
             
         console.log(`Run started: ${run.id}`);
@@ -528,6 +530,9 @@ async function generateSummary(activities, openai,assistant,userPrompt)
           });
           // Log the full response structure
           //console.log(`OpenAI msg content Response: ${JSON.stringify(messages, null, 2)}`);
+        if (!run.required_action?.submit_tool_outputs?.tool_calls) {
+          throw new Error("Function call was expected but did not occur.");
+        }
         console.log(`tool_calls: ${JSON.stringify(run.required_action.submit_tool_outputs.tool_calls)}`);
         console.log(`tool_calls arg: ${JSON.stringify(run.required_action.submit_tool_outputs.tool_calls[0].function.arguments)}`);
 
