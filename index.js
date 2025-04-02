@@ -518,6 +518,7 @@ async function generateSummary(activities, openai,assistant,userPrompt)
         // Step 6: Run the Assistant
         const run = await openai.beta.threads.runs.createAndPoll(thread.id, {
             assistant_id: assistant.id,
+            tool_choice: "required"
         });
             
         console.log(`Run started: ${run.id}`);
