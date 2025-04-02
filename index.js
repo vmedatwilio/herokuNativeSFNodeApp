@@ -518,6 +518,17 @@ async function generateSummary(activities, openai,assistant,userPrompt)
         // Step 6: Run the Assistant
         const run = await openai.beta.threads.runs.createAndPoll(thread.id, {
             assistant_id: assistant.id,
+            tool_choice: {
+              type: "function",
+              function: {
+                  name: "generate_monthly_activity_summary", 
+              },
+              type: "function",
+              function: {
+                  name: "generate_quarterly_activity_summary", 
+              }
+          },
+          parallel_tool_calls : false
         });
             
         console.log(`Run started: ${run.id}`);
@@ -538,7 +549,8 @@ async function generateSummary(activities, openai,assistant,userPrompt)
         // console.log("summary :", summary);
         // console.log("ActivityCount :", summaryObj.activityCount);
         // console.log("activityMapping :", summaryObj.activityMapping);
-
+          
+        // add delay for 2 sec here 
         const file = await openai.files.del(fileId);
 
           console.log(file);
