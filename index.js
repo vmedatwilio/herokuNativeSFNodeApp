@@ -331,7 +331,7 @@ async function processSummary(accountId, accessToken, callbackUrl, userPrompt,us
                     console.log(`  ${month}: ${tmpactivites.length} activities`);
                     const monthIndex = monthMap[month.toLowerCase()];
                     const startdate = new Date(year, monthIndex, 1);
-                    const summary = await generateSummary(tmpactivites,openai,assistant,userPrompt.replace('{{YearMonth}}',`${month} ${year}`),'generate_monthly_activity_summary');
+                    const summary = await generateSummary(tmpactivites,openai,assistant,userPrompt.replace('{{YearMonth}}',`${month} ${year}`));
                     finalSummary[year][month] = {"summary":JSON.stringify(summary),"count":tmpactivites.length,"startdate":startdate};
                 }
             }
@@ -367,7 +367,7 @@ async function processSummary(accountId, accessToken, callbackUrl, userPrompt,us
         //                             10.**Return only the raw JSON object** with no explanations, Markdown formatting, or extra characters. Do not wrap the JSON in triple backticks or include "json" as a specifier.`;
 
 
-        const Quarterlysummary = await generateSummary(finalSummary,openai,assistant,userPromptQtr,'generate_quarterly_activity_summary');
+        const Quarterlysummary = await generateSummary(finalSummary,openai,assistant,userPromptQtr);
                           
 
         //const quaertersums= Quarterlysummary;
@@ -481,7 +481,7 @@ async function createTimileSummarySalesforceRecords( conn,summaries={},parentId,
 }
 
 //funtcion to generate summary from OpenAI
-async function generateSummary(activities, openai,assistant,userPrompt,functionName) 
+async function generateSummary(activities, openai,assistant,userPrompt) 
 {
     try 
     {
@@ -518,12 +518,6 @@ async function generateSummary(activities, openai,assistant,userPrompt,functionN
         // Step 6: Run the Assistant
         const run = await openai.beta.threads.runs.createAndPoll(thread.id, {
             assistant_id: assistant.id,
-            tool_choice: {
-              type: "function",
-              function: {
-                  name: functionName, 
-              }
-          }
         });
             
         console.log(`Run started: ${run.id}`);
@@ -544,8 +538,7 @@ async function generateSummary(activities, openai,assistant,userPrompt,functionN
         // console.log("summary :", summary);
         // console.log("ActivityCount :", summaryObj.activityCount);
         // console.log("activityMapping :", summaryObj.activityMapping);
-          
-        // add delay for 2 sec here 
+
         const file = await openai.files.del(fileId);
 
           console.log(file);
