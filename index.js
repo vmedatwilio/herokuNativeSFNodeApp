@@ -284,9 +284,9 @@ async function processSummary(accountId, accessToken, callbackUrl, userPrompt,us
         
         // Step 2: Create an Assistant (if not created before)
         const assistant = await openai.beta.assistants.create({
-            name: "Salesforce Summarizer",
-            instructions: "You are an AI that summarizes Salesforce activity data into monthly/quarterly report based on the function and prompt provided",
-            tools: [{ type: "file_search" },{type:"function" , "function" :qtrJSON!= undefined ? JSON.parse(qtrJSON) : functions[1]},{type:"function" , "function" : monthJSON!= undefined ? JSON.parse(monthJSON) : functions[0]}], // Allows using files
+            name: "Salesforce Monthly Summarizer",
+            instructions: "You are an AI assistant specialized in analyzing raw Salesforce activity data for a single month and generating structured JSON summaries using the provided function 'generate_monthly_activity_summary'. Focus on extracting key themes, tone, and recommended actions.",
+            tools: [{ type: "file_search" },{type:"function" , "function" : monthJSON!= undefined ? JSON.parse(monthJSON) : functions[0]}], // Allows using files
             model: "gpt-4o",
         });
 
@@ -367,7 +367,14 @@ async function processSummary(accountId, accessToken, callbackUrl, userPrompt,us
         //                             10.**Return only the raw JSON object** with no explanations, Markdown formatting, or extra characters. Do not wrap the JSON in triple backticks or include "json" as a specifier.`;
 
 
-        const Quarterlysummary = await generateSummary(finalSummary,openai,assistant,userPromptQtr);
+        const assistantQtr = await openai.beta.assistants.create({
+          name: "Salesforce Quarterly Aggregator",
+          instructions: "You are an AI assistant specialized in aggregating pre-summarized monthly Salesforce activity data (provided as JSON in the prompt) into a structured quarterly JSON summary using the provided function 'generate_quarterly_activity_summary'. Consolidate insights and activity lists accurately.",
+          tools: [{ type: "file_search" },{type:"function" , "function" : qtrJSON!= undefined ? JSON.parse(qtrJSON) : functions[1]}], // Allows using files
+          model: "gpt-4o",
+      });
+
+        const Quarterlysummary = await generateSummary(finalSummary,openai,assistantQtr,userPromptQtr);
                           
 
         //const quaertersums= Quarterlysummary;
@@ -519,8 +526,8 @@ async function generateSummary(activities, openai,assistant,userPrompt)
         const run = await openai.beta.threads.runs.createAndPoll(thread.id, {
             assistant_id: assistant.id,
             tool_choice: "required",
-            instructions: "You MUST call a function to process this request. Do NOT return text responses.",
-            temperature: 0
+            instructions: "You MUST call a function to process this request. Do NOT return text responses."
+            //temperature: 0
         });
             
         console.log(`Run started: ${run.id}`);
