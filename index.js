@@ -410,7 +410,8 @@ app.post('/generatesummary', async (req, res) => {
         summaryMap, // Optional JSON string map of existing summary records (e.g., {"Jan 2024": "recordId"})
         loggedinUserId,
         qtrJSON, // Optional override for quarterly function schema (JSON string)
-        monthJSON // Optional override for monthly function schema (JSON string)
+        monthJSON, // Optional override for monthly function schema (JSON string)
+        summarObj
     } = req.body;
 
     if (!accountId || !callbackUrl || !accessToken || !queryText || !userPrompt || !userPromptQtr || !loggedinUserId) {
@@ -478,7 +479,8 @@ app.post('/generatesummary', async (req, res) => {
         monthlyFuncSchema, // Pass the final schema (default or custom)
         quarterlyFuncSchema, // Pass the final schema (default or custom)
         monthlyAssistantId, // Pass the ID obtained during startup
-        quarterlyAssistantId // Pass the ID obtained during startup
+        quarterlyAssistantId, // Pass the ID obtained during startup
+        summarObj
     ).catch(async (error) => {
         console.error(`[${accountId}] Unhandled error during background processing:`, error);
         try {
@@ -513,7 +515,8 @@ async function processSummary(
     finalMonthlyFuncSchema, // Receive the final schema to use
     finalQuarterlyFuncSchema, // Receive the final schema to use
     finalMonthlyAssistantId, // Receive the final ID
-    finalQuarterlyAssistantId // Receive the final ID
+    finalQuarterlyAssistantId, // Receive the final ID
+    summarObj
 ) {
     console.log(`[${accountId}] Starting processSummary using Monthly Asst: ${finalMonthlyAssistantId}, Quarterly Asst: ${finalQuarterlyAssistantId}`);
 
@@ -527,7 +530,7 @@ async function processSummary(
     try {
         // 1. Fetch Salesforce Records
         console.log(`[${accountId}] Fetching Salesforce records...`);
-        const groupedData = await fetchRecords(conn, queryText);
+        const groupedData = await fetchRecords(conn, queryText,summarObj);
         console.log(`[${accountId}] Fetched and grouped data by year/month. Total record count: ${Object.values(groupedData).flatMap(yearData => yearData.flatMap(monthObj => Object.values(monthObj)[0])).length}`);
 
         // 2. Generate Monthly Summaries
@@ -594,7 +597,7 @@ async function processSummary(
 
         if (Object.keys(monthlyForSalesforce).length > 0 && Object.values(monthlyForSalesforce).some(year => Object.keys(year).length > 0)) {
             console.log(`[${accountId}] Saving monthly summaries to Salesforce...`);
-            await createTimileSummarySalesforceRecords(conn, monthlyForSalesforce, accountId, 'Monthly', summaryRecordsMap,loggedinUserId);
+            await createTimileSummarySalesforceRecords(conn, monthlyForSalesforce, accountId, 'Monthly', summaryRecordsMap,loggedinUserId,summarObj);
             console.log(`[${accountId}] Monthly summaries saved.`);
         } else {
              console.log(`[${accountId}] No monthly summaries generated to save.`);
@@ -676,7 +679,7 @@ async function processSummary(
          if (Object.keys(finalQuarterlyDataForSalesforce).length > 0 && Object.values(finalQuarterlyDataForSalesforce).some(year => Object.keys(year).length > 0)) {
             const totalQuarterlyRecords = Object.values(finalQuarterlyDataForSalesforce).reduce((sum, year) => sum + Object.keys(year).length, 0);
             console.log(`[${accountId}] Saving ${totalQuarterlyRecords} quarterly summaries to Salesforce...`);
-            await createTimileSummarySalesforceRecords(conn, finalQuarterlyDataForSalesforce, accountId, 'Quarterly', summaryRecordsMap,loggedinUserId);
+            await createTimileSummarySalesforceRecords(conn, finalQuarterlyDataForSalesforce, accountId, 'Quarterly', summaryRecordsMap,loggedinUserId,summarObj);
             console.log(`[${accountId}] Quarterly summaries saved.`);
         } else {
              console.log(`[${accountId}] No quarterly summaries generated or transformed to save.`);
@@ -875,7 +878,7 @@ async function generateSummary(
 
 // --- Salesforce Record Creation/Update Function ---
 // Uses Bulk API for efficiency
-async function createTimileSummarySalesforceRecords(conn, summaries, parentId, summaryCategory, summaryRecordsMap,loggedinUserId) {
+async function createTimileSummarySalesforceRecords(conn, summaries, parentId, summaryCategory, summaryRecordsMap,loggedinUserId,summarObj) {
     console.log(`[${parentId}] Preparing to save ${summaryCategory} summaries...`);
     let recordsToCreate = [];
     let recordsToUpdate = [];
@@ -926,6 +929,7 @@ async function createTimileSummarySalesforceRecords(conn, summaries, parentId, s
                 FY_Quarter__c: fyQuarterValue || null, // Text field for quarter (e.g., 'Q1') (null if monthly)
                 Month_Date__c: startDate, // Date field for the start of the period
                 Number_of_Records__c: count || 0, // Number field for activity count
+                Type__c : summarObj == "Activity" ? "Activity" : summarObj == "CTA" ? "CTA" : "Activity",
                 // Add other relevant fields like OwnerId, etc.
                 // OwnerId: loggedinUserId // Example: Assign to the user initiating the request
             };
@@ -998,7 +1002,7 @@ function handleBulkResults(results, originalPayloads, operationType, parentId) {
 
 // --- Salesforce Data Fetching with Pagination ---
 // Recursively fetches all records for a given SOQL query using queryMore
-async function fetchRecords(conn, queryOrUrl, allRecords = [], isFirstIteration = true) {
+async function fetchRecords(conn, queryOrUrl,summarObj, allRecords = [], isFirstIteration = true) {
     try {
         const logPrefix = isFirstIteration ? `Initial Query (${(queryOrUrl || '').substring(0, 100)}...)` : "Fetching next batch";
         console.log(`[SF Fetch] ${logPrefix}`);
@@ -1020,11 +1024,11 @@ async function fetchRecords(conn, queryOrUrl, allRecords = [], isFirstIteration 
         if (!queryResult.done && queryResult.nextRecordsUrl) {
             // Add a small delay to avoid hitting rate limits aggressively, especially with large datasets
             await new Promise(resolve => setTimeout(resolve, 200)); // 200ms delay
-            return fetchRecords(conn, queryResult.nextRecordsUrl, allRecords, false);
+            return fetchRecords(conn, queryResult.nextRecordsUrl,summarObj, allRecords, false);
         } else {
             // All records fetched, proceed to grouping
             console.log(`[SF Fetch] Finished fetching. Total records retrieved: ${allRecords.length}. Grouping...`);
-            return groupRecordsByMonthYear(allRecords); // Group after all records are fetched
+            return groupRecordsByMonthYear(allRecords,summarObj); // Group after all records are fetched
         }
     } catch (error) {
         console.error(`[SF Fetch] Error fetching Salesforce activities: ${error.message}`, error);
@@ -1036,21 +1040,21 @@ async function fetchRecords(conn, queryOrUrl, allRecords = [], isFirstIteration 
 
 // --- Data Grouping Helper Function ---
 // Groups fetched Salesforce records by Year and then by Month Name
-function groupRecordsByMonthYear(records) {
+function groupRecordsByMonthYear(records,summarObj) {
     const groupedData = {}; // { year: [ { MonthName: [activityObj, ...] }, ... ], ... }
     const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
     records.forEach(activity => {
         // Validate essential ActivityDate field
-        if (!activity.ActivityDate) {
-            console.warn(`Skipping activity (ID: ${activity.Id || 'Unknown'}) due to missing ActivityDate.`);
+        if (!activity.CreatedDate) {
+            console.warn(`Skipping activity (ID: ${activity.Id || 'Unknown'}) due to missing CreatedDate.`);
             return; // Skip record if date is missing
         }
         try {
             // Attempt to parse the date. Handle potential invalid date strings.
-            const date = new Date(activity.ActivityDate);
+            const date = new Date(activity.CreatedDate);
              if (isNaN(date.getTime())) {
-                 console.warn(`Skipping activity (ID: ${activity.Id || 'Unknown'}) due to invalid ActivityDate format: ${activity.ActivityDate}`);
+                 console.warn(`Skipping activity (ID: ${activity.Id || 'Unknown'}) due to invalid CreatedDate format: ${activity.CreatedDate}`);
                  return;
              }
 
@@ -1073,17 +1077,54 @@ function groupRecordsByMonthYear(records) {
 
             // Add the relevant activity details to the month's array
             // Select only necessary fields needed for the AI prompt/function
-            monthEntry[month].push({
-                Id: activity.Id,
-                Description: activity.Description || null, // Use null for missing values if preferred
-                Subject: activity.Subject || null,
-                ActivityDate: activity.ActivityDate // Keep original format if needed elsewhere
-                // Add other fields from the SOQL query if required by the AI prompt/function schemas
-                // e.g., Type: activity.Type, Status: activity.Status
+            if(summarObj == "CTA") {
+                monthEntry[month].push({
+                    Id: activity.Id,
+                    Name: activity.Name || null,
+                    CampaignGroup: activity.Campaign_Group__c || null,
+                    CampaignSubType: activity.Campaign_Sub_Type__c || null,
+                    CampaignType: activity.Campaign_Type__c || null,
+                    Contact: activity.Contact__c || null,
+                    CreatedDateCustom: activity.Created_Date_Custom__c || null,
+                    CurrentInterestedProductScoreGrade: activity.Current_Interested_Product_Score_Grade__c || null,
+                    CustomerSelectedProduct: activity.Customer_Selected_Product__c || null,
+                    CustomersPerceivedSLA: activity.CustomersPerceivedSLA__c || null,
+                    DateContacted: activity.Date_Contacted__c || null,
+                    DateEmailed: activity.Date_Emailed__c || null,
+                    Description: activity.Description__c || null,
+                    DispositionedDate: activity.Dispositioned_Date__c || null,
+                    LeadScoreAccountSecurity: activity.Lead_Score_Account_Security__c || null,
+                    LeadScoreContactCenterTwilioFlex: activity.Lead_Score_Contact_Center_Twilio_Flex__c || null,
+                    LeadScoreSMSMessaging: activity.Lead_Score_SMS_Messaging__c || null,
+                    LeadScoreVoiceIVRSIPTrunking: activity.Lead_Score_Voice_IVR_SIP_Trunking__c || null,
+                    MQLStatus: activity.MQL_Status__c || null,
+                    MQLType: activity.MQL_Type__c || null,
+                    NameCustom: activity.Name__c || null,
+                    CurrentOwnerFullName: activity.Current_Owner_Full_Name__c || null,
+                    Opportunity: activity.Opportunity__c || null,
+                    ProductCategory: activity.Product_Category__c || null,
+                    ProductType: activity.Product_Type__c || null,
+                    QualifiedLeadSource: activity.Qualified_Lead_Source__c || null,
+                    RejectedReason: activity.Rejected_Reason__c || null,
+                    Title: activity.Title__c || null // Keep original format if needed elsewhere
+                    // Add other fields from the SOQL query if required by the AI prompt/function schemas
+                    // e.g., Type: activity.Type, Status: activity.Status
             });
+            }
+            else if( summarObj == "Activity") {
+                monthEntry[month].push({
+                    Id: activity.Id,
+                    Description: activity.Description || null, // Use null for missing values if preferred
+                    Subject: activity.Subject || null,
+                    ActivityDate: activity.CreatedDate // Keep original format if needed elsewhere
+                    // Add other fields from the SOQL query if required by the AI prompt/function schemas
+                    // e.g., Type: activity.Type, Status: activity.Status
+            });
+            }
+            
         } catch(dateError) {
              // Catch potential errors during date processing (though basic validation is done above)
-             console.warn(`Skipping activity (ID: ${activity.Id || 'Unknown'}) due to date processing error: ${dateError.message}. Date value: ${activity.ActivityDate}`);
+             console.warn(`Skipping activity (ID: ${activity.Id || 'Unknown'}) due to date processing error: ${dateError.message}. Date value: ${activity.CreatedDate}`);
         }
     });
     console.log("Finished grouping records by year and month.");
