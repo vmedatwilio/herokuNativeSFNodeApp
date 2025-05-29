@@ -31,10 +31,8 @@ const SF_LOGIN_URL = process.env.SF_LOGIN_URL;
 const PORT = process.env.PORT || 3000;
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 
-// --- Assistant IDs are now PREFERRED, creation is fallback (TWO Generic Assistants) ---
 const OPENAI_MONTHLY_ASSISTANT_ID_ENV = process.env.OPENAI_MONTHLY_ASSISTANT_ID;
 const OPENAI_QUARTERLY_ASSISTANT_ID_ENV = process.env.OPENAI_QUARTERLY_ASSISTANT_ID;
-// CTA-specific assistant ID env vars are no longer used.
 
 const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-4o";
 const TIMELINE_SUMMARY_OBJECT_API_NAME = "Timeline_Summary__c";
@@ -42,17 +40,13 @@ const DIRECT_INPUT_THRESHOLD = 2000;
 const PROMPT_LENGTH_THRESHOLD = 256000;
 const TEMP_FILE_DIR = path.join(__dirname, 'temp_files');
 
-// --- Environment Variable Validation (Essential Vars) ---
 if (!SF_LOGIN_URL || !OPENAI_API_KEY) {
     console.error("FATAL ERROR: Missing required environment variables (SF_LOGIN_URL, OPENAI_API_KEY).");
     process.exit(1);
 }
 
-// --- Global Variables for Final Assistant IDs ---
 let monthlyAssistantId = null;
 let quarterlyAssistantId = null;
-// ctaMonthlyAssistantId and ctaQuarterlyAssistantId are removed.
-
 
 // --- Default OpenAI Function Schemas (Activity) ---
 const defaultActivityFunctions = [
@@ -390,17 +384,12 @@ const defaultCtaFunctions = [
     }
 ];
 
-
-// --- OpenAI Client Initialization ---
 const openai = new OpenAI({ apiKey: OPENAI_API_KEY });
-
-// --- Express Application Setup ---
 const app = express();
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
-// --- Helper Function to Create or Retrieve Assistant ---
 async function createOrRetrieveAssistant(
     openaiClient,
     assistantIdEnvVar,
@@ -436,9 +425,8 @@ async function createOrRetrieveAssistant(
             model: assistantModel,
         });
         console.log(`Successfully created new Assistant "${newAssistant.name}" with ID: ${newAssistant.id}`);
-        // Construct a generic env var name suggestion based on the role (Monthly/Quarterly)
         const role = assistantName.includes("Monthly") ? "MONTHLY" : assistantName.includes("Quarterly") ? "QUARTERLY" : "GENERIC";
-        const envVarNameSuggestion = `OPENAI_${role}_ASSISTANT_ID`; // Suggest using the main env var names
+        const envVarNameSuggestion = `OPENAI_${role}_ASSISTANT_ID`;
         console.warn(`--> IMPORTANT: Consider adding this ID to your .env file as ${envVarNameSuggestion}=${newAssistant.id} for future reuse if this assistant is intended for this role.`);
         return newAssistant.id;
     } catch (creationError) {
@@ -447,33 +435,24 @@ async function createOrRetrieveAssistant(
     }
 }
 
-
-// --- Server Startup ---
 (async () => {
     try {
         console.log("Initializing Assistants...");
         await fs.ensureDir(TEMP_FILE_DIR);
-
         const assistantBaseTools = [{ type: "file_search" }, { type: "function" }];
 
-        // --- Setup Monthly Assistant (Generic for Activities & CTAs) ---
         monthlyAssistantId = await createOrRetrieveAssistant(
-            openai,
-            OPENAI_MONTHLY_ASSISTANT_ID_ENV, // Use the generic monthly ID env var
+            openai, OPENAI_MONTHLY_ASSISTANT_ID_ENV,
             "Salesforce Monthly Data Summarizer",
             "You are an AI assistant. Your task is to analyze Salesforce data (which could be Activities or CTAs) for a single month. You will be provided with the data and a specific function schema (tailored for either activities or CTAs) during each run. You MUST generate a structured JSON output that strictly adheres to the provided function schema by calling that function. If the schema includes an 'html_report' field, you must generate the HTML report content for it. If data is provided as a file, use the file_search tool to access and process its content.",
-            assistantBaseTools,
-            OPENAI_MODEL
+            assistantBaseTools, OPENAI_MODEL
         );
 
-        // --- Setup Quarterly Assistant (Generic for Activities & CTAs) ---
         quarterlyAssistantId = await createOrRetrieveAssistant(
-            openai,
-            OPENAI_QUARTERLY_ASSISTANT_ID_ENV, // Use the generic quarterly ID env var
+            openai, OPENAI_QUARTERLY_ASSISTANT_ID_ENV,
             "Salesforce Quarterly Data Aggregator",
             "You are an AI assistant. Your task is to aggregate pre-summarized monthly Salesforce data (which could be from Activities or CTAs) into a consolidated quarterly summary. You will be provided with an array of monthly JSON summaries and a specific function schema (tailored for either activities or CTAs) during each run. You MUST generate a structured JSON output that strictly adheres to the provided function schema by calling that function. This includes correctly processing the input 'monthly_summaries' array and generating aggregated data. If the schema includes an 'html_report' field, you must generate the HTML report content for it.",
-            assistantBaseTools,
-            OPENAI_MODEL
+            assistantBaseTools, OPENAI_MODEL
         );
 
         if (!monthlyAssistantId || !quarterlyAssistantId ) {
@@ -498,47 +477,37 @@ async function createOrRetrieveAssistant(
     }
 })();
 
-
-// --- Main API Endpoint ---
 app.post('/generatesummary', async (req, res) => {
     console.log("Received /generatesummary request");
-
     const {
         accountId, callbackUrl, userPrompt, userPromptQtr, queryText,
         summaryMap, loggedinUserId, qtrJSON, monthJSON,
-        summarObj // "Activity" or "CTA"
+        summarObj
     } = req.body;
 
-    // --- Ensure Core Assistants are Ready ---
-    if (!monthlyAssistantId || !quarterlyAssistantId) { // Simplified check
+    if (!monthlyAssistantId || !quarterlyAssistantId) {
         console.error("Error: Core Assistants not initialized properly.");
         return res.status(500).json({ error: "Internal Server Error: Core Assistants not ready." });
     }
-
     if (summarObj !== "Activity" && summarObj !== "CTA") {
-        console.warn("Bad Request: Invalid 'summarObj' parameter. Must be 'Activity' or 'CTA'.");
         return res.status(400).send({ error: "Invalid 'summarObj' parameter. Must be 'Activity' or 'CTA'." });
     }
 
     const authHeader = req.headers["authorization"];
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
-        console.warn("Unauthorized request: Missing or invalid Bearer token.");
         return res.status(401).json({ error: "Unauthorized" });
     }
     const accessToken = authHeader.split(" ")[1];
 
     if (!accountId || !callbackUrl || !accessToken || !queryText || !userPrompt || !userPromptQtr || !loggedinUserId || !summarObj) {
-        console.warn("Bad Request: Missing required parameters.");
-        return res.status(400).send({ error: "Missing required parameters (accountId, callbackUrl, accessToken, queryText, userPrompt, userPromptQtr, loggedinUserId, summarObj)" });
+        return res.status(400).send({ error: "Missing required parameters" });
     }
 
     let summaryRecordsMap = {};
     let finalMonthlyFuncSchema, finalQuarterlyFuncSchema;
-    // Assistant IDs are now fixed
     const currentMonthlyAssistantId = monthlyAssistantId;
     const currentQuarterlyAssistantId = quarterlyAssistantId;
 
-    // Select function schemas based on summarObj
     if (summarObj === "Activity") {
         finalMonthlyFuncSchema = defaultActivityFunctions.find(f => f.name === 'generate_monthly_activity_summary');
         finalQuarterlyFuncSchema = defaultActivityFunctions.find(f => f.name === 'generate_quarterly_activity_summary');
@@ -548,117 +517,88 @@ app.post('/generatesummary', async (req, res) => {
     }
 
     try {
-        if (summaryMap) summaryRecordsMap = Object.entries(JSON.parse(summaryMap)).map(([key, value]) => ({ key, value }));
+        if (summaryMap) summaryRecordsMap = Object.entries(JSON.parse(summaryMap)).map(([k, v]) => ({ key:k, value:v }));
         if (monthJSON) {
             const customMonthSchema = JSON.parse(monthJSON);
-            if (!customMonthSchema || typeof customMonthSchema !== 'object' || !customMonthSchema.name || !customMonthSchema.parameters) {
-                throw new Error("Provided monthJSON schema is invalid.");
-            }
+            if (!customMonthSchema?.name || !customMonthSchema?.parameters) throw new Error("MonthJSON invalid.");
             finalMonthlyFuncSchema = customMonthSchema;
-            console.log(`Using custom monthly function schema for ${summarObj} from request.`);
+            console.log(`Using custom monthly schema for ${summarObj}.`);
         }
         if (qtrJSON) {
             const customQtrSchema = JSON.parse(qtrJSON);
-            if (!customQtrSchema || typeof customQtrSchema !== 'object' || !customQtrSchema.name || !customQtrSchema.parameters) {
-                throw new Error("Provided qtrJSON schema is invalid.");
-            }
+            if (!customQtrSchema?.name || !customQtrSchema?.parameters) throw new Error("QtrJSON invalid.");
             finalQuarterlyFuncSchema = customQtrSchema;
-            console.log(`Using custom quarterly function schema for ${summarObj} from request.`);
+            console.log(`Using custom quarterly schema for ${summarObj}.`);
         }
     } catch (e) {
-        console.error("Failed to parse JSON input from request body:", e);
-        return res.status(400).send({ error: `Invalid JSON provided. ${e.message}` });
+        return res.status(400).send({ error: `Invalid JSON. ${e.message}` });
     }
 
     if (!finalMonthlyFuncSchema || !finalQuarterlyFuncSchema) {
-        console.error(`FATAL: Function schemas for ${summarObj} could not be loaded.`);
-        return res.status(500).send({ error: `Internal server error: Could not load function schemas for ${summarObj}.`});
+        return res.status(500).send({ error: `Could not load schemas for ${summarObj}.`});
     }
 
-    res.status(202).json({ status: 'processing', message: `Summary generation for ${summarObj} initiated. You will receive a callback.` });
-    console.log(`Initiating ${summarObj} summary processing for Account ID: ${accountId} using Monthly Asst: ${currentMonthlyAssistantId}, Qtrly Asst: ${currentQuarterlyAssistantId}`);
+    res.status(202).json({ status: 'processing', message: `Summary for ${summarObj} initiated.` });
+    console.log(`Initiating ${summarObj} summary for Account: ${accountId} MonthlyAsst: ${currentMonthlyAssistantId}, QtrlyAsst: ${currentQuarterlyAssistantId}`);
 
     processSummary(
         accountId, accessToken, callbackUrl, userPrompt, userPromptQtr, queryText,
         summaryRecordsMap, loggedinUserId,
         finalMonthlyFuncSchema, finalQuarterlyFuncSchema,
-        currentMonthlyAssistantId, currentQuarterlyAssistantId, // Pass the generic assistant IDs
+        currentMonthlyAssistantId, currentQuarterlyAssistantId,
         summarObj
     ).catch(async (error) => {
-        console.error(`[${accountId}] Unhandled error during background processing for ${summarObj}:`, error);
-        try {
-            await sendCallbackResponse(accountId, callbackUrl, loggedinUserId, accessToken, "Failed", `Unhandled ${summarObj} processing error: ${error.message}`);
-        } catch (callbackError) {
-            console.error(`[${accountId}] Failed to send error callback for ${summarObj} after unhandled exception:`, callbackError);
-        }
+        console.error(`[${accountId}] Unhandled error for ${summarObj}:`, error);
+        await sendCallbackResponse(accountId, callbackUrl, loggedinUserId, accessToken, "Failed", `Unhandled ${summarObj} error: ${error.message}`);
     });
 });
 
-
-// --- Helper Function to Get Quarter from Month Index ---
 function getQuarterFromMonthIndex(monthIndex) {
-    if (monthIndex >= 0 && monthIndex <= 2) return 'Q1';
-    if (monthIndex >= 3 && monthIndex <= 5) return 'Q2';
-    if (monthIndex >= 6 && monthIndex <= 8) return 'Q3';
-    if (monthIndex >= 9 && monthIndex <= 11) return 'Q4';
+    if (monthIndex <= 2) return 'Q1'; if (monthIndex <= 5) return 'Q2';
+    if (monthIndex <= 8) return 'Q3'; if (monthIndex <= 11) return 'Q4';
     return 'Unknown';
 }
 
-// --- Asynchronous Summary Processing Logic ---
 async function processSummary(
     accountId, accessToken, callbackUrl,
     userPromptMonthlyTemplate, userPromptQuarterlyTemplate, queryText,
     summaryRecordsMap, loggedinUserId,
     finalMonthlyFuncSchema, finalQuarterlyFuncSchema,
-    finalMonthlyAssistantId, finalQuarterlyAssistantId, // These are now the generic IDs
+    finalMonthlyAssistantId, finalQuarterlyAssistantId,
     summarObj
 ) {
-    console.log(`[${accountId}] Starting processSummary for ${summarObj} using Monthly Asst: ${finalMonthlyAssistantId}, Quarterly Asst: ${finalQuarterlyAssistantId}`);
-
-    const conn = new jsforce.Connection({
-        instanceUrl: SF_LOGIN_URL, accessToken: accessToken, maxRequest: 5, version: '59.0'
-    });
+    console.log(`[${accountId}] processSummary for ${summarObj} MonthlyAsst: ${finalMonthlyAssistantId}, QtrlyAsst: ${finalQuarterlyAssistantId}`);
+    const conn = new jsforce.Connection({ instanceUrl: SF_LOGIN_URL, accessToken, maxRequest: 5, version: '59.0' });
 
     try {
-        console.log(`[${accountId}] Fetching Salesforce records for ${summarObj}...`);
         const groupedData = await fetchRecords(conn, queryText, summarObj);
-        const recordCount = Object.values(groupedData).flatMap(yearData => yearData.flatMap(monthObj => Object.values(monthObj)[0])).length;
-        console.log(`[${accountId}] Fetched and grouped ${summarObj} data. Total records: ${recordCount}`);
+        const recordCount = Object.values(groupedData).flat().reduce((sum, monthObj) => sum + Object.values(monthObj)[0].length, 0);
+        console.log(`[${accountId}] Fetched/grouped ${summarObj} data. Records: ${recordCount}`);
 
         const finalMonthlySummaries = {};
         const monthMap = { january: 0, february: 1, march: 2, april: 3, may: 4, june: 5, july: 6, august: 7, september: 8, october: 9, november: 10, december: 11 };
 
         for (const year in groupedData) {
-            console.log(`[${accountId}] Processing Year: ${year} for Monthly ${summarObj} Summaries`);
             finalMonthlySummaries[year] = {};
             for (const monthObj of groupedData[year]) {
                 for (const month in monthObj) {
                     const records = monthObj[month];
-                    console.log(`[${accountId}]   Processing ${summarObj} Month: ${month} (${records.length} records)`);
-                    if (records.length === 0) {
-                        console.log(`[${accountId}]   Skipping empty month for ${summarObj}: ${month} ${year}.`);
-                        continue;
-                    }
+                    if (records.length === 0) continue;
                     const monthIndex = monthMap[month.toLowerCase()];
-                     if (monthIndex === undefined) {
-                        console.warn(`[${accountId}]   Could not map month name: ${month}. Skipping ${summarObj} processing.`);
-                        continue;
-                    }
+                    if (monthIndex === undefined) continue;
+
                     const startDate = new Date(Date.UTC(year, monthIndex, 1));
                     const userPromptMonthly = userPromptMonthlyTemplate.replace('{{YearMonth}}', `${month} ${year}`);
-
                     const monthlySummaryResult = await generateSummary(
-                        records, openai, finalMonthlyAssistantId, // Use generic monthly assistant ID
+                        records, openai, finalMonthlyAssistantId,
                         userPromptMonthly, finalMonthlyFuncSchema, summarObj
                     );
                     finalMonthlySummaries[year][month] = {
-                         aiOutput: monthlySummaryResult,
-                         count: records.length,
+                         aiOutput: monthlySummaryResult, count: records.length,
                          startdate: startDate.toISOString().split('T')[0],
-                         year: parseInt(year),
-                         monthIndex: monthIndex
+                         year: parseInt(year), monthIndex
                     };
-                    console.log(`[${accountId}]   Generated monthly ${summarObj} summary for ${month} ${year}.`);
+                    console.log(`[${accountId}] Monthly ${summarObj} summary for ${month} ${year} done.`);
                  }
             }
         }
@@ -667,491 +607,272 @@ async function processSummary(
         for (const year in finalMonthlySummaries) {
              monthlyForSalesforce[year] = {};
              for (const month in finalMonthlySummaries[year]) {
-                 const monthData = finalMonthlySummaries[year][month];
-                 let aiSummaryHtml = '';
-                 if (summarObj === "Activity") {
-                     aiSummaryHtml = monthData.aiOutput?.summary || '';
-                 } else if (summarObj === "CTA") {
-                     aiSummaryHtml = monthData.aiOutput?.html_report || '';
-                 }
-
+                 const mData = finalMonthlySummaries[year][month];
+                 let html = (summarObj === "Activity") ? mData.aiOutput?.summary : mData.aiOutput?.html_report;
                  monthlyForSalesforce[year][month] = {
-                     summary: JSON.stringify(monthData.aiOutput),
-                     summaryDetails: aiSummaryHtml,
-                     count: monthData.count,
-                     startdate: monthData.startdate
+                     summary: JSON.stringify(mData.aiOutput), summaryDetails: html || '',
+                     count: mData.count, startdate: mData.startdate
                  };
              }
         }
-
-        if (Object.keys(monthlyForSalesforce).length > 0 && Object.values(monthlyForSalesforce).some(yearData => Object.keys(yearData).length > 0)) {
-            console.log(`[${accountId}] Saving monthly ${summarObj} summaries to Salesforce...`);
+        if (Object.values(monthlyForSalesforce).some(y => Object.keys(y).length > 0)) {
             await createTimileSummarySalesforceRecords(conn, monthlyForSalesforce, accountId, 'Monthly', summaryRecordsMap, loggedinUserId, summarObj);
-            console.log(`[${accountId}] Monthly ${summarObj} summaries saved.`);
-        } else {
-             console.log(`[${accountId}] No monthly ${summarObj} summaries generated to save.`);
         }
 
-        console.log(`[${accountId}] Grouping monthly ${summarObj} summaries by quarter...`);
         const quarterlyInputGroups = {};
         for (const year in finalMonthlySummaries) {
             for (const month in finalMonthlySummaries[year]) {
-                const monthData = finalMonthlySummaries[year][month];
-                const quarter = getQuarterFromMonthIndex(monthData.monthIndex);
-                const quarterKey = `${year}-${quarter}`;
-                if (!quarterlyInputGroups[quarterKey]) quarterlyInputGroups[quarterKey] = [];
-
-                let monthlyAiOutputForQuarterly = monthData.aiOutput;
-                if (summarObj === "CTA" && monthlyAiOutputForQuarterly) {
-                    const { html_report, ...rest } = monthlyAiOutputForQuarterly;
-                    monthlyAiOutputForQuarterly = rest;
-                }
-                quarterlyInputGroups[quarterKey].push(monthlyAiOutputForQuarterly);
+                const mData = finalMonthlySummaries[year][month];
+                const qKey = `${year}-${getQuarterFromMonthIndex(mData.monthIndex)}`;
+                if (!quarterlyInputGroups[qKey]) quarterlyInputGroups[qKey] = [];
+                let aiOut = mData.aiOutput;
+                if (summarObj === "CTA" && aiOut) { const { html_report, ...rest } = aiOut; aiOut = rest; }
+                quarterlyInputGroups[qKey].push(aiOut);
             }
         }
-        console.log(`[${accountId}] Identified ${Object.keys(quarterlyInputGroups).length} quarters with ${summarObj} data.`);
 
         const allQuarterlyRawResults = {};
-        for (const [quarterKey, monthlySummariesForQuarter] of Object.entries(quarterlyInputGroups)) {
-            console.log(`[${accountId}] Generating quarterly ${summarObj} summary for ${quarterKey} using ${monthlySummariesForQuarter.length} monthly summaries...`);
-            if (!monthlySummariesForQuarter || monthlySummariesForQuarter.length === 0) {
-                console.warn(`[${accountId}] Skipping ${quarterKey} for ${summarObj} as it has no monthly summaries.`);
-                continue;
-            }
-
-            const quarterlyInputDataString = JSON.stringify(monthlySummariesForQuarter, null, 2);
-            const [year, quarter] = quarterKey.split('-');
-            const userPromptQuarterly = `${userPromptQuarterlyTemplate.replace('{{Quarter}}', quarter).replace('{{Year}}', year)}\n\nAggregate the following monthly ${summarObj} summary data for ${quarterKey}:\n\`\`\`json\n${quarterlyInputDataString}\n\`\`\``;
-
+        for (const [qKey, monthSummaries] of Object.entries(quarterlyInputGroups)) {
+            if (!monthSummaries || monthSummaries.length === 0) continue;
+            const [year, qtr] = qKey.split('-');
+            const promptQtr = `${userPromptQuarterlyTemplate.replace('{{Quarter}}',qtr).replace('{{Year}}',year)}\n\nAgg ${summarObj} data for ${qKey}:\n\`\`\`json\n${JSON.stringify(monthSummaries,null,2)}\n\`\`\``;
             try {
-                 const quarterlySummaryResult = await generateSummary(
-                    null, openai, finalQuarterlyAssistantId, // Use generic quarterly assistant ID
-                    userPromptQuarterly, finalQuarterlyFuncSchema, summarObj
+                 allQuarterlyRawResults[qKey] = await generateSummary(
+                    null, openai, finalQuarterlyAssistantId, promptQtr, finalQuarterlyFuncSchema, summarObj
                  );
-                 allQuarterlyRawResults[quarterKey] = quarterlySummaryResult;
-                 console.log(`[${accountId}] Successfully generated quarterly ${summarObj} summary for ${quarterKey}.`);
-            } catch (quarterlyError) {
-                 console.error(`[${accountId}] Failed to generate quarterly ${summarObj} summary for ${quarterKey}:`, quarterlyError);
-            }
+                 console.log(`[${accountId}] Quarterly ${summarObj} summary for ${qKey} done.`);
+            } catch (qErr) { console.error(`[${accountId}] Fail Qtrly ${summarObj} for ${qKey}:`, qErr); }
         }
 
-        console.log(`[${accountId}] Transforming ${Object.keys(allQuarterlyRawResults).length} generated quarterly ${summarObj} summaries...`);
         const finalQuarterlyDataForSalesforce = {};
-        for (const [quarterKey, rawAiResult] of Object.entries(allQuarterlyRawResults)) {
-             const transformedResult = transformQuarterlyStructure(rawAiResult, quarterKey, summarObj);
-             for (const year in transformedResult) {
+        for (const [qKey, rawAi] of Object.entries(allQuarterlyRawResults)) {
+             const transformed = transformQuarterlyStructure(rawAi, qKey, summarObj);
+             for (const year in transformed) {
                  if (!finalQuarterlyDataForSalesforce[year]) finalQuarterlyDataForSalesforce[year] = {};
-                 for (const quarter in transformedResult[year]) {
-                     finalQuarterlyDataForSalesforce[year][quarter] = transformedResult[year][quarter];
+                 for (const qtr in transformed[year]) {
+                     finalQuarterlyDataForSalesforce[year][qtr] = transformed[year][qtr];
                  }
              }
         }
-
-        if (Object.keys(finalQuarterlyDataForSalesforce).length > 0 && Object.values(finalQuarterlyDataForSalesforce).some(yearData => Object.keys(yearData).length > 0)) {
-            const totalQuarterlyRecords = Object.values(finalQuarterlyDataForSalesforce).reduce((sum, yearData) => sum + Object.keys(yearData).length, 0);
-            console.log(`[${accountId}] Saving ${totalQuarterlyRecords} quarterly ${summarObj} summaries to Salesforce...`);
+        if (Object.values(finalQuarterlyDataForSalesforce).some(y => Object.keys(y).length > 0)) {
             await createTimileSummarySalesforceRecords(conn, finalQuarterlyDataForSalesforce, accountId, 'Quarterly', summaryRecordsMap, loggedinUserId, summarObj);
-            console.log(`[${accountId}] Quarterly ${summarObj} summaries saved.`);
-        } else {
-             console.log(`[${accountId}] No quarterly ${summarObj} summaries generated or transformed to save.`);
         }
 
-        console.log(`[${accountId}] ${summarObj} Process completed.`);
-        await sendCallbackResponse(accountId, callbackUrl, loggedinUserId, accessToken, "Success", `${summarObj} Summary Processed Successfully`);
-
+        await sendCallbackResponse(accountId, callbackUrl, loggedinUserId, accessToken, "Success", `${summarObj} Processed`);
     } catch (error) {
-        console.error(`[${accountId}] Error during ${summarObj} summary processing:`, error);
-        await sendCallbackResponse(accountId, callbackUrl, loggedinUserId, accessToken, "Failed", `${summarObj} Processing error: ${error.message}`);
+        console.error(`[${accountId}] Error in ${summarObj} processSummary:`, error);
+        await sendCallbackResponse(accountId, callbackUrl, loggedinUserId, accessToken, "Failed", `${summarObj} Error: ${error.message}`);
     }
 }
 
-
-// --- OpenAI Summary Generation Function (assistantId is now generic) ---
 async function generateSummary(
-    records,
-    openaiClient,
-    assistantId, // This will be the generic monthly or quarterly ID
-    userPrompt,
-    functionSchema,
-    summarObj
+    records, openaiClient, assistantId, userPrompt, functionSchema, summarObj
 ) {
-    let fileId = null;
-    let thread = null;
-    let filePath = null;
-    let inputMethod = "prompt";
-
+    let fileId = null, thread = null, filePath = null, inputMethod = "prompt";
     try {
         await fs.ensureDir(TEMP_FILE_DIR);
         thread = await openaiClient.beta.threads.create();
-        console.log(`[Thread ${thread.id}] Created for Assistant ${assistantId} (Task: ${summarObj}, Function: ${functionSchema.name})`);
+        console.log(`[Th ${thread.id}] Asst ${assistantId} (${summarObj}, Func: ${functionSchema.name})`);
 
-        let finalUserPrompt = userPrompt;
-        let messageAttachments = [];
-
-        if (records && Array.isArray(records) && records.length > 0) {
-            let recordsJsonString = JSON.stringify(records, null, 2);
-            let potentialFullPrompt = `${userPrompt}\n\nHere is the ${summarObj} data to process:\n\`\`\`json\n${recordsJsonString}\n\`\`\``;
-            console.log(`[Thread ${thread.id}] Potential prompt length for ${summarObj} with direct JSON: ${potentialFullPrompt.length} characters.`);
-
-            if (potentialFullPrompt.length < PROMPT_LENGTH_THRESHOLD && records.length <= DIRECT_INPUT_THRESHOLD) {
-                inputMethod = "direct JSON";
-                finalUserPrompt = potentialFullPrompt;
-                console.log(`[Thread ${thread.id}] Using direct JSON input for ${summarObj}.`);
+        let finalUserPrompt = userPrompt, attachments = [];
+        if (records?.length > 0) {
+            let recJson = JSON.stringify(records, null, 2);
+            let potentialPrompt = `${userPrompt}\n\n${summarObj} data:\n\`\`\`json\n${recJson}\n\`\`\``;
+            if (potentialPrompt.length < PROMPT_LENGTH_THRESHOLD && records.length <= DIRECT_INPUT_THRESHOLD) {
+                inputMethod = "direct JSON"; finalUserPrompt = potentialPrompt;
             } else {
                 inputMethod = "file upload";
-                console.log(`[Thread ${thread.id}] Using file upload for ${summarObj}.`);
-                finalUserPrompt = userPrompt;
-
-                let recordsText = records.map((record, index) => {
-                    let recordLines = [`${summarObj} ${index + 1}:`];
-                    for (const [key, value] of Object.entries(record)) {
-                        let displayValue = value === null || value === undefined ? 'N/A' :
-                                           typeof value === 'object' ? JSON.stringify(value) : String(value);
-                        recordLines.push(`  ${key}: ${displayValue}`);
-                    }
-                    return recordLines.join('\n');
-                }).join('\n\n---\n\n');
-
-                const timestamp = new Date().toISOString().replace(/[:.-]/g, "_");
-                const filename = `salesforce_${summarObj.toLowerCase()}_${timestamp}_${thread.id}.txt`;
-                filePath = path.join(TEMP_FILE_DIR, filename);
-                await fs.writeFile(filePath, recordsText);
-                console.log(`[Thread ${thread.id}] Temporary text file for ${summarObj} generated: ${filePath}`);
-
-                const uploadResponse = await openaiClient.files.create({
-                    file: fs.createReadStream(filePath), purpose: "assistants",
-                });
-                fileId = uploadResponse.id;
-                console.log(`[Thread ${thread.id}] File for ${summarObj} uploaded to OpenAI: ${fileId}`);
-                messageAttachments.push({ file_id: fileId, tools: [{ type: "file_search" }] });
-                console.log(`[Thread ${thread.id}] Attaching file ${fileId} with file_search tool for ${summarObj}.`);
+                let recText = records.map((r, i) => `${summarObj} ${i+1}:\n`+Object.entries(r).map(([k,v])=>`  ${k}: ${typeof v === 'object' ? JSON.stringify(v) : String(v)}`).join('\n')).join('\n\n---\n\n');
+                filePath = path.join(TEMP_FILE_DIR, `sf_${summarObj.toLowerCase()}_${Date.now()}_${thread.id}.txt`);
+                await fs.writeFile(filePath, recText);
+                const upRes = await openaiClient.files.create({ file: fs.createReadStream(filePath), purpose: "assistants" });
+                fileId = upRes.id;
+                attachments.push({ file_id: fileId, tools: [{ type: "file_search" }] });
             }
-        } else {
-             console.log(`[Thread ${thread.id}] No ${summarObj} records array provided or array is empty. Using prompt content as is.`);
         }
+        console.log(`[Th ${thread.id}] Using ${inputMethod} for ${summarObj}.`);
 
-        const messagePayload = { role: "user", content: finalUserPrompt };
-        if (messageAttachments.length > 0) messagePayload.attachments = messageAttachments;
-        const message = await openaiClient.beta.threads.messages.create(thread.id, messagePayload);
-        console.log(`[Thread ${thread.id}] Message added for ${summarObj} (using ${inputMethod}). ID: ${message.id}`);
+        const msgPayload = { role: "user", content: finalUserPrompt };
+        if (attachments.length > 0) msgPayload.attachments = attachments;
+        await openaiClient.beta.threads.messages.create(thread.id, msgPayload);
 
-        console.log(`[Thread ${thread.id}] Starting run for ${summarObj}, Assistant: ${assistantId}, Forcing function: ${functionSchema.name}`);
         const run = await openaiClient.beta.threads.runs.createAndPoll(thread.id, {
             assistant_id: assistantId,
-            tools: [{ type: "function", function: functionSchema }], // Provide the specific schema for this task
+            tools: [{ type: "function", function: functionSchema }],
             tool_choice: { type: "function", function: { name: functionSchema.name } },
         });
-        console.log(`[Thread ${thread.id}] Run status for ${summarObj}: ${run.status}`);
+        console.log(`[Th ${thread.id}] Run status ${summarObj}: ${run.status}`);
 
         if (run.status === 'requires_action') {
-            const toolCalls = run.required_action?.submit_tool_outputs?.tool_calls;
-            if (!toolCalls || toolCalls.length === 0) {
-                 throw new Error("Function call was expected but not provided by the Assistant.");
+            const toolCall = run.required_action?.submit_tool_outputs?.tool_calls?.[0];
+            if (!toolCall || toolCall.type !== 'function' || toolCall.function.name !== functionSchema.name) {
+                  throw new Error(`Unexpected tool: Expected ${functionSchema.name}, Got ${toolCall?.function?.name || toolCall?.type}`);
             }
-            const toolCall = toolCalls[0];
-            if (toolCall.type !== 'function' || toolCall.function.name !== functionSchema.name) {
-                  throw new Error(`Assistant required action for unexpected tool: Expected ${functionSchema.name}, Got ${toolCall.function?.name || toolCall.type}`);
-            }
-            const rawArgs = toolCall.function.arguments;
-            console.log(`[Thread ${thread.id}] Function call arguments received for ${summarObj} (${toolCall.function.name}).`);
-            try {
-                 const parsedSummaryObject = JSON.parse(rawArgs);
-                 console.log(`[Thread ${thread.id}] Successfully parsed function arguments for ${summarObj}.`);
-                 return parsedSummaryObject;
-            } catch (parseError) {
-                 console.error(`[Thread ${thread.id}] Failed to parse function call arguments JSON for ${summarObj}:`, parseError, `Raw args: ${rawArgs.substring(0,500)}...`);
-                 throw new Error(`Failed to parse function call arguments from AI for ${summarObj}: ${parseError.message}`);
-            }
+            console.log(`[Th ${thread.id}] Args for ${summarObj} (${toolCall.function.name}) recvd.`);
+            return JSON.parse(toolCall.function.arguments);
         } else if (run.status === 'completed') {
-             console.warn(`[Thread ${thread.id}] Run for ${summarObj} completed without requiring function call, despite tool_choice. Check Assistant setup/prompt.`);
-             const messagesList = await openaiClient.beta.threads.messages.list(run.thread_id, { limit: 1 });
-             throw new Error(`Assistant run for ${summarObj} completed without making the required function call. Last message: ${messagesList.data[0]?.content[0]?.text?.value || "N/A"}`);
+             const msgs = await openaiClient.beta.threads.messages.list(run.thread_id, {limit:1});
+             throw new Error(`${summarObj} run completed, no func call. Last msg: ${msgs.data[0]?.content[0]?.text?.value || "N/A"}`);
         } else {
-             console.error(`[Thread ${thread.id}] Run for ${summarObj} failed. Status: ${run.status}`, run.last_error);
-             throw new Error(`Assistant run for ${summarObj} failed. Status: ${run.status}. Error: ${run.last_error ? run.last_error.message : 'Unknown'}`);
+             throw new Error(`${summarObj} run failed. Status: ${run.status}. Err: ${run.last_error?.message || 'Unknown'}`);
         }
     } catch (error) {
-        console.error(`[Thread ${thread?.id || 'N/A'}] Error in generateSummary for ${summarObj}: ${error.message}`, error);
+        console.error(`[Th ${thread?.id || 'N/A'}] generateSummary err (${summarObj}): ${error.message}`, error);
         throw error;
     } finally {
-        if (filePath) {
-            try { await fs.unlink(filePath); console.log(`[Thread ${thread?.id}] Deleted temp file: ${filePath}`); }
-            catch (e) { console.error(`[Thread ${thread?.id}] Error deleting temp file ${filePath}:`, e); }
-        }
-        if (fileId) {
-            try { await openaiClient.files.del(fileId); console.log(`[Thread ${thread?.id}] Deleted OpenAI file: ${fileId}`); }
-            catch (e) { if (!(e instanceof NotFoundError || e?.status === 404)) console.error(`[Thread ${thread?.id}] Error deleting OpenAI file ${fileId}:`, e); }
-        }
+        if (filePath) try { await fs.unlink(filePath); } catch (e) { console.error(`Err del temp ${filePath}:`,e); }
+        if (fileId) try { await openaiClient.files.del(fileId); } catch (e) { if (!(e instanceof NotFoundError || e?.status === 404)) console.error(`Err del OpenAI file ${fileId}:`,e); }
     }
 }
 
-// --- Salesforce Record Creation/Update Function ---
 async function createTimileSummarySalesforceRecords(conn, summaries, parentId, summaryCategory, summaryRecordsMap, loggedinUserId, summarObj) {
-    console.log(`[${parentId}] Preparing to save ${summaryCategory} ${summarObj} summaries...`);
-    let recordsToCreate = [];
-    let recordsToUpdate = [];
-
+    console.log(`[${parentId}] Saving ${summaryCategory} ${summarObj} summaries...`);
+    let toCreate = [], toUpdate = [];
     for (const year in summaries) {
         for (const periodKey in summaries[year]) {
-            const summaryData = summaries[year][periodKey];
-            let summaryJsonString = summaryData.summary;
-            let summaryDetailsHtml = summaryData.summaryDetails;
-            let startDate = summaryData.startdate;
-            let count = summaryData.count;
-
-            if (!summaryDetailsHtml && summaryJsonString) {
+            const sData = summaries[year][periodKey];
+            let jsonStr = sData.summary, html = sData.summaryDetails, startDate = sData.startdate, count = sData.count;
+            if (!html && jsonStr) {
                 try {
-                    const parsedJson = JSON.parse(summaryJsonString);
-                    if (summarObj === "Activity") {
-                        summaryDetailsHtml = parsedJson?.summary || '';
-                    } else if (summarObj === "CTA") {
-                        summaryDetailsHtml = parsedJson?.html_report || '';
-                    }
-                } catch (e) {
-                    console.warn(`[${parentId}] Could not parse 'summaryJsonString' for ${periodKey} ${year} (${summarObj}) to extract HTML details as fallback.`);
-                }
+                    const pJson = JSON.parse(jsonStr);
+                    html = (summarObj === "Activity") ? pJson?.summary : pJson?.html_report;
+                } catch (e) { /* ignore */ }
             }
+            let qtrVal = (summaryCategory === 'Quarterly') ? periodKey : null;
+            let monthVal = (summaryCategory === 'Monthly') ? periodKey : null;
+            let mapKey = (summaryCategory === 'Quarterly') ? `${qtrVal} ${year}` : `${monthVal.substring(0,3)} ${year}`;
+            let existId = getValueByKey(summaryRecordsMap, mapKey);
 
-            let fyQuarterValue = (summaryCategory === 'Quarterly') ? periodKey : '';
-            let monthValue = (summaryCategory === 'Monthly') ? periodKey : '';
-            let shortMonth = monthValue ? monthValue.substring(0, 3) : '';
-            let summaryMapKey = (summaryCategory === 'Quarterly') ? `${fyQuarterValue} ${year}` : `${shortMonth} ${year}`;
-            let existingRecordId = getValueByKey(summaryRecordsMap, summaryMapKey);
-
-            const recordPayload = {
-                Parent_Id__c: parentId,
-                Month__c: monthValue || null,
-                Year__c: String(year),
-                Summary_Category__c: summaryCategory,
-                Requested_By__c: loggedinUserId,
-                Summary__c: summaryJsonString ? summaryJsonString.substring(0, 131072) : null,
-                Summary_Details__c: summaryDetailsHtml ? summaryDetailsHtml.substring(0, 131072) : null,
-                FY_Quarter__c: fyQuarterValue || null,
-                Month_Date__c: startDate,
-                Number_of_Records__c: count || 0,
-                Type__c: summarObj,
+            const payload = {
+                Parent_Id__c: parentId, Month__c: monthVal, Year__c: String(year), Summary_Category__c: summaryCategory,
+                Requested_By__c: loggedinUserId, Summary__c: jsonStr?.substring(0, 131072),
+                Summary_Details__c: html?.substring(0, 131072), FY_Quarter__c: qtrVal,
+                Month_Date__c: startDate, Number_of_Records__c: count || 0, Type__c: summarObj,
             };
-
-            if (!recordPayload.Summary_Category__c || !recordPayload.Month_Date__c) {
-                 console.warn(`[${parentId}] Skipping ${summarObj} record for ${summaryMapKey} due to missing Category or Start Date.`);
-                 continue;
-            }
-
-            if (existingRecordId) {
-                console.log(`[${parentId}]   Queueing update for ${summarObj} ${summaryMapKey} (ID: ${existingRecordId})`);
-                recordsToUpdate.push({ Id: existingRecordId, ...recordPayload });
-            } else {
-                console.log(`[${parentId}]   Queueing create for ${summarObj} ${summaryMapKey}`);
-                recordsToCreate.push(recordPayload);
-            }
+            if (!payload.Month_Date__c) continue;
+            if (existId) toUpdate.push({ Id: existId, ...payload }); else toCreate.push(payload);
         }
     }
-
-    try {
-        const options = { allOrNone: false };
-        if (recordsToCreate.length > 0) {
-            console.log(`[${parentId}] Creating ${recordsToCreate.length} new ${summaryCategory} ${summarObj} summary records...`);
-            const createResults = await conn.bulk.load(TIMELINE_SUMMARY_OBJECT_API_NAME, "insert", options, recordsToCreate);
-            handleBulkResults(createResults, recordsToCreate, 'create', parentId, summarObj);
-        }
-        if (recordsToUpdate.length > 0) {
-            console.log(`[${parentId}] Updating ${recordsToUpdate.length} existing ${summaryCategory} ${summarObj} summary records...`);
-             const updateResults = await conn.bulk.load(TIMELINE_SUMMARY_OBJECT_API_NAME, "update", options, recordsToUpdate);
-             handleBulkResults(updateResults, recordsToUpdate, 'update', parentId, summarObj);
-        }
-    } catch (err) {
-        console.error(`[${parentId}] Failed to save ${summaryCategory} ${summarObj} records: ${err.message}`, err);
-        throw new Error(`Salesforce save for ${summarObj} failed: ${err.message}`);
+    const opts = { allOrNone: false };
+    if (toCreate.length > 0) {
+        const res = await conn.bulk.load(TIMELINE_SUMMARY_OBJECT_API_NAME, "insert", opts, toCreate);
+        handleBulkResults(res, toCreate, 'create', parentId, summarObj);
+    }
+    if (toUpdate.length > 0) {
+        const res = await conn.bulk.load(TIMELINE_SUMMARY_OBJECT_API_NAME, "update", opts, toUpdate);
+        handleBulkResults(res, toUpdate, 'update', parentId, summarObj);
     }
 }
 
-// Helper to log bulk API results
-function handleBulkResults(results, originalPayloads, operationType, parentId, summarObj) {
-    console.log(`[${parentId}] Bulk ${operationType} for ${summarObj} results received (${results.length}).`);
-    let successes = 0; let failures = 0;
-    results.forEach((res, index) => {
-        const p = originalPayloads[index];
-        const idForLog = p.Id || `${p.Month__c || p.FY_Quarter__c || 'N/A'} ${p.Year__c || 'N/A'}`;
-        if (!res.success) {
-            failures++;
-            console.error(`[${parentId}] Error ${operationType} ${summarObj} record ${index + 1} (${idForLog}): ${JSON.stringify(res.errors)}`);
-        } else { successes++; }
+function handleBulkResults(results, payloads, opType, parentId, summarObj) {
+    let s=0, f=0;
+    results.forEach((res, i) => {
+        const p = payloads[i];
+        const idLog = p.Id || `${p.Month__c || p.FY_Quarter__c} ${p.Year__c}`;
+        if (!res.success) { f++; console.error(`[${parentId}] Err ${opType} ${summarObj} ${idLog}: ${JSON.stringify(res.errors)}`); }
+        else s++;
     });
-    console.log(`[${parentId}] Bulk ${operationType} for ${summarObj} summary: ${successes} succeeded, ${failures} failed.`);
+    console.log(`[${parentId}] Bulk ${opType} ${summarObj}: ${s} ok, ${f} fail.`);
 }
 
-
-// --- Salesforce Data Fetching with Pagination ---
-async function fetchRecords(conn, queryOrUrl, summarObj, allRecords = [], isFirstIteration = true) {
+async function fetchRecords(conn, queryOrUrl, summarObj, allRecords = [], first = true) {
     try {
-        const logPrefix = isFirstIteration ? `Initial Query for ${summarObj}` : `Fetching next batch for ${summarObj}`;
-        console.log(`[SF Fetch] ${logPrefix}: ${(queryOrUrl || '').substring(0,150)}...`);
-        const queryResult = isFirstIteration ? await conn.query(queryOrUrl) : await conn.queryMore(queryOrUrl);
-        const fetchedCount = queryResult.records ? queryResult.records.length : 0;
-        console.log(`[SF Fetch] Fetched ${fetchedCount} ${summarObj} records. Total so far: ${allRecords.length + fetchedCount}. Done: ${queryResult.done}`);
-        if (fetchedCount > 0) allRecords = allRecords.concat(queryResult.records);
-
-        if (!queryResult.done && queryResult.nextRecordsUrl) {
-            await new Promise(resolve => setTimeout(resolve, 200));
-            return fetchRecords(conn, queryResult.nextRecordsUrl, summarObj, allRecords, false);
-        } else {
-            console.log(`[SF Fetch] Finished fetching ${summarObj}. Total records: ${allRecords.length}. Grouping...`);
-            return groupRecordsByMonthYear(allRecords, summarObj);
+        const logPfx = first ? `Init Query ${summarObj}` : `Next batch ${summarObj}`;
+        console.log(`[SF Fetch] ${logPfx}: ${String(queryOrUrl).substring(0,150)}...`);
+        const res = first ? await conn.query(queryOrUrl) : await conn.queryMore(queryOrUrl);
+        const fetched = res.records?.length || 0;
+        if (fetched > 0) allRecords.push(...res.records);
+        console.log(`[SF Fetch] Got ${fetched} ${summarObj}. Total: ${allRecords.length}. Done: ${res.done}`);
+        if (!res.done && res.nextRecordsUrl) {
+            await new Promise(r => setTimeout(r, 200));
+            return fetchRecords(conn, res.nextRecordsUrl, summarObj, allRecords, false);
         }
+        return groupRecordsByMonthYear(allRecords, summarObj);
     } catch (error) {
-        console.error(`[SF Fetch] Error fetching Salesforce ${summarObj} data: ${error.message}`, error);
+        console.error(`[SF Fetch] Error ${summarObj}: ${error.message}`, error);
         throw error;
     }
 }
 
-
-// --- Data Grouping Helper Function ---
 function groupRecordsByMonthYear(records, summarObj) {
-    const groupedData = {};
-    const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-
-    records.forEach(record => {
-        if (!record.CreatedDate) {
-            console.warn(`Skipping ${summarObj} record (ID: ${record.Id || 'Unknown'}) due to missing CreatedDate.`);
-            return;
-        }
+    const grouped = {};
+    const months = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+    records.forEach(r => {
+        if (!r.CreatedDate) return;
         try {
-            const date = new Date(record.CreatedDate);
-            if (isNaN(date.getTime())) {
-                 console.warn(`Skipping ${summarObj} record (ID: ${record.Id || 'Unknown'}) due to invalid CreatedDate: ${record.CreatedDate}`);
-                 return;
-            }
-            const year = date.getUTCFullYear();
-            const monthIndex = date.getUTCMonth();
-            const month = monthNames[monthIndex];
-
-            if (!groupedData[year]) groupedData[year] = [];
-            let monthEntry = groupedData[year].find(entry => entry[month]);
-            if (!monthEntry) {
-                monthEntry = { [month]: [] };
-                groupedData[year].push(monthEntry);
-            }
-
+            const d = new Date(r.CreatedDate); if (isNaN(d.getTime())) return;
+            const y = d.getUTCFullYear(), mIdx = d.getUTCMonth(), mName = months[mIdx];
+            if (!grouped[y]) grouped[y] = [];
+            let mEntry = grouped[y].find(e => e[mName]);
+            if (!mEntry) { mEntry = { [mName]: [] }; grouped[y].push(mEntry); }
             if (summarObj === "Activity") {
-                monthEntry[month].push({
-                    Id: record.Id,
-                    Description: record.Description || null,
-                    Subject: record.Subject || null,
-                    ActivityDate: record.CreatedDate // Using CreatedDate for grouping, ensure SOQL provides specific ActivityDate if needed by AI
-                });
+                mEntry[mName].push({ Id:r.Id, Description:r.Description, Subject:r.Subject, ActivityDate:r.CreatedDate });
             } else if (summarObj === "CTA") {
-                monthEntry[month].push({
-                    Id: record.Id, Name: record.Name || null, CampaignGroup: record.Campaign_Group__c || null,
-                    CampaignSubType: record.Campaign_Sub_Type__c || null, CampaignType: record.Campaign_Type__c || null,
-                    Contact: record.Contact__c || null, CreatedDate: record.CreatedDate, // Important for AI context
-                    CreatedDateCustom: record.Created_Date_Custom__c || null,
-                    CurrentInterestedProductScoreGrade: record.Current_Interested_Product_Score_Grade__c || null,
-                    CustomerSelectedProduct: record.Customer_Selected_Product__c || null,
-                    CustomersPerceivedSLA: record.CustomersPerceivedSLA__c || null, DateContacted: record.Date_Contacted__c || null,
-                    DateEmailed: record.Date_Emailed__c || null, Description: record.Description__c || null,
-                    DispositionedDate: record.Dispositioned_Date__c || null,
-                    LeadScoreAccountSecurity: record.Lead_Score_Account_Security__c || null,
-                    LeadScoreContactCenterTwilioFlex: record.Lead_Score_Contact_Center_Twilio_Flex__c || null,
-                    LeadScoreSMSMessaging: record.Lead_Score_SMS_Messaging__c || null,
-                    LeadScoreVoiceIVRSIPTrunking: record.Lead_Score_Voice_IVR_SIP_Trunking__c || null,
-                    MQLStatus: record.MQL_Status__c || null, MQLType: record.MQL_Type__c || null,
-                    CurrentOwnerFullName: record.Current_Owner_Full_Name__c || null, Opportunity: record.Opportunity__c || null,
-                    ProductCategory: record.Product_Category__c || null, ProductType: record.Product_Type__c || null,
-                    QualifiedLeadSource: record.Qualified_Lead_Source__c || null, RejectedReason: record.Rejected_Reason__c || null,
-                    Title: record.Title__c || null
+                mEntry[mName].push({
+                    Id:r.Id, Name:r.Name, CampaignGroup:r.Campaign_Group__c, CampaignSubType:r.Campaign_Sub_Type__c,
+                    CampaignType:r.Campaign_Type__c, Contact:r.Contact__c, CreatedDate:r.CreatedDate,
+                    CreatedDateCustom:r.Created_Date_Custom__c, CurrentInterestedProductScoreGrade:r.Current_Interested_Product_Score_Grade__c,
+                    CustomerSelectedProduct:r.Customer_Selected_Product__c, CustomersPerceivedSLA:r.CustomersPerceivedSLA__c,
+                    DateContacted:r.Date_Contacted__c, DateEmailed:r.Date_Emailed__c, Description:r.Description__c,
+                    DispositionedDate:r.Dispositioned_Date__c, LeadScoreAccountSecurity:r.Lead_Score_Account_Security__c,
+                    LeadScoreContactCenterTwilioFlex:r.Lead_Score_Contact_Center_Twilio_Flex__c,
+                    LeadScoreSMSMessaging:r.Lead_Score_SMS_Messaging__c, LeadScoreVoiceIVRSIPTrunking:r.Lead_Score_Voice_IVR_SIP_Trunking__c,
+                    MQLStatus:r.MQL_Status__c, MQLType:r.MQL_Type__c, CurrentOwnerFullName:r.Current_Owner_Full_Name__c,
+                    Opportunity:r.Opportunity__c, ProductCategory:r.Product_Category__c, ProductType:r.Product_Type__c,
+                    QualifiedLeadSource:r.Qualified_Lead_Source__c, RejectedReason:r.Rejected_Reason__c, Title:r.Title__c
                 });
             }
-        } catch(dateError) {
-             console.warn(`Skipping ${summarObj} record (ID: ${record.Id || 'Unknown'}) due to date processing error: ${dateError.message}. Date: ${record.CreatedDate}`);
-        }
+        } catch(e) { /* ignore date err */ }
     });
-    console.log(`Finished grouping ${summarObj} records by year and month.`);
-    return groupedData;
+    console.log(`Finished grouping ${summarObj} records.`);
+    return grouped;
 }
 
-
-// --- Callback Sending Function ---
 async function sendCallbackResponse(accountId, callbackUrl, loggedinUserId, accessToken, status, message) {
-    const logMessage = message.length > 500 ? message.substring(0, 500) + '...' : message;
-    console.log(`[${accountId}] Sending callback to ${callbackUrl}. Status: ${status}, Message: ${logMessage}`);
+    const logMsg = message.substring(0,500)+(message.length>500?'...':'');
+    console.log(`[${accountId}] Callback to ${callbackUrl}. Status: ${status}, Msg: ${logMsg}`);
     try {
-        const processStatus = (status === "Success" || status === "Failed") ? status : "Failed";
         await axios.post(callbackUrl, {
-                accountId: accountId, loggedinUserId: loggedinUserId, status: "Completed",
-                processResult: processStatus, message: message
-            }, {
-                headers: { "Content-Type": "application/json", "Authorization": `Bearer ${accessToken}` },
-                timeout: 30000
-            }
+                accountId, loggedinUserId, status: "Completed",
+                processResult: (status === "Success" || status === "Failed") ? status : "Failed", message
+            }, { headers: { "Content-Type": "application/json", "Authorization": `Bearer ${accessToken}` }, timeout: 30000 }
         );
-        console.log(`[${accountId}] Callback sent successfully.`);
     } catch (error) {
-        let em = `Failed to send callback to ${callbackUrl}. `;
-        if (error.response) em += `Status: ${error.response.status}, Data: ${JSON.stringify(error.response.data)}, Message: ${error.message}`;
-        else if (error.request) em += `No response received. ${error.message}`;
-        else em += `Error: ${error.message}`;
+        let em = `Fail callback ${callbackUrl}. `;
+        if (error.response) em += `Status: ${error.response.status}, Data: ${JSON.stringify(error.response.data)}`;
+        else if (error.request) em += `No response. ${error.message}`; else em += `Error: ${error.message}`;
         console.error(`[${accountId}] ${em}`);
     }
 }
 
-
-// --- Utility Helper Functions ---
-function getValueByKey(recordsArray, searchKey) {
-    if (!recordsArray || !Array.isArray(recordsArray)) return null;
-    const record = recordsArray.find(item => item && typeof item.key === 'string' && item.key.toLowerCase() === searchKey.toLowerCase());
-    return record ? record.value : null;
+function getValueByKey(arr, key) {
+    if (!arr?.length) return null;
+    const rec = arr.find(i => i?.key?.toLowerCase() === key.toLowerCase());
+    return rec ? rec.value : null;
 }
 
-function transformQuarterlyStructure(quarterlyAiOutput, quarterKey, summarObj) {
-    const result = {};
-    const [yearStr, quarterStr] = quarterKey.split('-');
-    const year = parseInt(yearStr);
-    const quarter = quarterStr;
-
-    if (!quarterlyAiOutput || typeof quarterlyAiOutput !== 'object' || !year || !quarter) {
-        console.warn(`[Transform] Invalid input for ${summarObj} quarterly transformation:`, { quarterlyAiOutput, quarterKey });
-        return result;
-    }
-
-    let htmlSummary = '';
-    let fullQuarterlyJson = JSON.stringify(quarterlyAiOutput);
-    let recordCount = 0;
-    let startDate = `${year}-${getQuarterStartMonth(quarter)}-01`; // Default start date
-
+function transformQuarterlyStructure(qAiOutput, qKey, summarObj) {
+    const res = {}; const [yStr, qStr] = qKey.split('-'); const year = parseInt(yStr);
+    if (!qAiOutput || !year || !qStr) return res;
+    let html = '', count = 0, startDate = `${year}-${getQuarterStartMonth(qStr)}-01`;
     if (summarObj === "Activity") {
-        const yearData = quarterlyAiOutput.yearlySummary?.[0];
-        const quarterData = yearData?.quarters?.[0];
-        if (quarterData && quarterData.quarter === quarter && yearData.year === year) {
-            htmlSummary = quarterData.summary || '';
-            recordCount = quarterData.activityCount || 0;
-            startDate = quarterData.startdate || startDate; // Use AI's startdate if available
-        } else {
-            console.warn(`[Transform] Mismatched Activity quarter data for ${quarterKey}. Using defaults. AI Output:`, quarterlyAiOutput);
+        const qData = qAiOutput.yearlySummary?.[0]?.quarters?.[0];
+        if (qData?.quarter === qStr && qAiOutput.yearlySummary[0].year === year) {
+            html = qData.summary; count = qData.activityCount; startDate = qData.startdate || startDate;
         }
     } else if (summarObj === "CTA") {
-        htmlSummary = quarterlyAiOutput.html_report || '';
-        recordCount = quarterlyAiOutput.aggregated_data?.total_ctas || 0;
-        // For CTA, start_date is not part of its quarterly AI output schema, so we calculate it.
+        html = qAiOutput.html_report; count = qAiOutput.aggregated_data?.total_ctas;
     }
-
-    if (!result[year]) result[year] = {};
-    result[year][quarter] = {
-        summaryDetails: htmlSummary,
-        summaryJson: fullQuarterlyJson,
-        count: recordCount,
-        startdate: startDate
-    };
-    return result;
+    if (!res[year]) res[year] = {};
+    res[year][qStr] = { summaryDetails: html || '', summaryJson: JSON.stringify(qAiOutput), count: count || 0, startdate: startDate };
+    return res;
 }
 
-function getQuarterStartMonth(quarter) {
-    if (!quarter || typeof quarter !== 'string') {
-        console.warn(`Invalid quarter identifier "${quarter}" to getQuarterStartMonth. Defaulting Q1.`);
-        return '01';
-    }
-    switch (quarter.toUpperCase()) {
+function getQuarterStartMonth(q) {
+    if (!q) return '01';
+    switch (q.toUpperCase()) {
         case 'Q1': return '01'; case 'Q2': return '04';
         case 'Q3': return '07'; case 'Q4': return '10';
-        default: console.warn(`Unrecognized quarter "${quarter}" to getQuarterStartMonth. Defaulting Q1.`); return '01';
+        default: return '01';
     }
 }
