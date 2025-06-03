@@ -921,7 +921,7 @@ async function createTimileSummarySalesforceRecords(conn, summaries, parentId, s
                 Year__c: String(year), // Text or Number field for year
                 Summary_Category__c: summaryCategory,
                 Requested_By__c: loggedinUserId, // Picklist ('Monthly', 'Quarterly')
-                Type__c: 'Activity'
+                Type__c: 'Activity',
                 Summary__c: summaryJsonString ? summaryJsonString.substring(0, 131072) : null, // Long Text Area (check SF limit)
                 Summary_Details__c: summaryDetailsHtml ? summaryDetailsHtml.substring(0, 131072) : null, // Rich Text Area (check SF limit)
                 FY_Quarter__c: fyQuarterValue || null, // Text field for quarter (e.g., 'Q1') (null if monthly)
