@@ -624,7 +624,7 @@ async function processSummary(
             finalMonthlySummaries[year] = {};
             for (const monthObj of groupedData[year]) {
                 for (const month in monthObj) {
-                    const records = monthObj[month]; 
+                    const records = monthObj[month];
                     if (records.length === 0) {
                         console.log(`[${accountId}]   Skipping empty month for ${summarObj}: ${month} ${year}.`);
                         continue;
@@ -674,8 +674,8 @@ async function processSummary(
                     console.log(`[${accountId}] Extracted aiSummaryHtml for CTA ${month} ${year} (to be saved, length: ${html?.length || 0}): `, html ? `'${String(html).substring(0,100)}...'` : 'EMPTY');
                  }
                  monthlyForSalesforce[year][month] = {
-                     summary: JSON.stringify(mData.aiOutput), 
-                     summaryDetails: html, 
+                     summary: JSON.stringify(mData.aiOutput),
+                     summaryDetails: html,
                      count: mData.count, startdate: mData.startdate
                  };
              }
@@ -697,7 +697,7 @@ async function processSummary(
                 if (!quarterlyInputGroups[qKey]) quarterlyInputGroups[qKey] = [];
                 let aiOut = mData.aiOutput;
                 if (summarObj === "CTA" && aiOut && typeof aiOut === 'object') {
-                    const { html_report, ...rest } = aiOut; 
+                    const { html_report, ...rest } = aiOut;
                     aiOut = rest; // Pass only the JSON data, not the monthly HTML report
                 }
                 quarterlyInputGroups[qKey].push(aiOut);
@@ -738,7 +738,7 @@ async function processSummary(
 
         const finalQuarterlyDataForSalesforce = {};
         for (const [qKey, rawAi] of Object.entries(allQuarterlyRawResults)) {
-             const transformed = transformQuarterlyStructure(rawAi, qKey, summarObj); 
+             const transformed = transformQuarterlyStructure(rawAi, qKey, summarObj);
              for (const year in transformed) {
                  if (!finalQuarterlyDataForSalesforce[year]) finalQuarterlyDataForSalesforce[year] = {};
                  for (const qtr in transformed[year]) {
@@ -846,7 +846,7 @@ async function generateSummary(
         }
     } catch (error) {
         console.error(`[Th ${thread?.id || 'N/A'}] Error in generateSummary for ${summarObj}: ${error.message}`, error.stack);
-        throw error; 
+        throw error;
     } finally {
         if (filePath) try { await fs.unlink(filePath); console.log(`[Th ${thread?.id}] Deleted temp file: ${filePath}`); } catch (e) { console.error(`Err del temp ${filePath}:`,e); }
         if (fileId) try { await openaiClient.files.del(fileId); console.log(`[Th ${thread?.id}] Deleted OpenAI file: ${fileId}`); } catch (e) { if (!(e instanceof NotFoundError || e?.status === 404)) console.error(`Err del OpenAI file ${fileId}:`,e); }
@@ -861,8 +861,8 @@ async function createTimileSummarySalesforceRecords(conn, summaries, parentId, s
     for (const year in summaries) {
         for (const periodKey in summaries[year]) {
             const sData = summaries[year][periodKey];
-            let jsonStr = sData.summary; 
-            let html = sData.summaryDetails; 
+            let jsonStr = sData.summary;
+            let html = sData.summaryDetails;
             let startDate = sData.startdate;
             let count = sData.count;
 
@@ -871,6 +871,8 @@ async function createTimileSummarySalesforceRecords(conn, summaries, parentId, s
                 try {
                     const pJson = JSON.parse(jsonStr);
                     if (summarObj === "Activity") {
+                        // For activities, the primary summary (HTML) is often directly in a 'summary' field within the JSON.
+                        // For quarterly activities, the JSON (pJson) itself IS the quarterly object, which contains a 'summary' field.
                         html = pJson?.summary || '';
                     } else if (summarObj === "CTA") {
                         html = pJson?.html_report || ''; // Check html_report for CTAs
@@ -894,11 +896,11 @@ async function createTimileSummarySalesforceRecords(conn, summaries, parentId, s
             const payload = {
                 Parent_Id__c: parentId, Month__c: monthVal, Year__c: String(year), Summary_Category__c: summaryCategory,
                 Requested_By__c: loggedinUserId, Summary__c: jsonStr ? jsonStr.substring(0, 131072) : null,
-                Summary_Details__c: html ? html.substring(0, 131072) : null, 
+                Summary_Details__c: html ? html.substring(0, 131072) : null,
                 FY_Quarter__c: qtrVal, Month_Date__c: startDate, Number_of_Records__c: count || 0, Type__c: summarObj,
             };
 
-            if (!payload.Month_Date__c) { 
+            if (!payload.Month_Date__c) {
                 console.warn(`[${parentId}] Skipping ${summarObj} record for ${mapKey} due to missing Month_Date__c.`);
                 continue;
             }
@@ -954,7 +956,7 @@ async function fetchRecords(conn, queryOrUrl, summarObj, allRecords = [], first 
         if (fetched > 0) allRecords.push(...res.records);
         console.log(`[SF Fetch] Got ${fetched} ${summarObj} records. Total so far: ${allRecords.length}. Done: ${res.done}`);
         if (!res.done && res.nextRecordsUrl) {
-            await new Promise(r => setTimeout(r, 200)); 
+            await new Promise(r => setTimeout(r, 200));
             return fetchRecords(conn, res.nextRecordsUrl, summarObj, allRecords, false);
         }
         console.log(`[SF Fetch] Finished fetching ${summarObj}. Total records retrieved: ${allRecords.length}. Grouping...`);
@@ -1002,28 +1004,28 @@ function groupRecordsByMonthYear(records, summarObj) {
                         activityDateStr = new Date(r.ActivityDate).toISOString().split('T')[0];
                     } catch (dateErr) {
                         console.warn(`Invalid ActivityDate ${r.ActivityDate} for record ${r.Id}, using raw.`);
-                        activityDateStr = r.ActivityDate;
+                        activityDateStr = r.ActivityDate; // Keep raw if conversion fails
                     }
                 } else { // Fallback to CreatedDate if ActivityDate is missing
                      try {
                         activityDateStr = new Date(r.CreatedDate).toISOString().split('T')[0];
                     } catch (dateErr) {
                         console.warn(`Invalid CreatedDate (fallback) ${r.CreatedDate} for record ${r.Id}, using raw.`);
-                        activityDateStr = r.CreatedDate;
+                        activityDateStr = r.CreatedDate; // Keep raw if conversion fails
                     }
                 }
                 mEntry[mName].push({ Id:r.Id, Description:r.Description || null, Subject:r.Subject || null, ActivityDate: activityDateStr });
             } else if (summarObj === "CTA") {
-                mEntry[mName].push({ 
+                mEntry[mName].push({
                     Id:r.Id, Name:r.Name || null, CampaignGroup:r.Campaign_Group__c || null, CampaignSubType:r.Campaign_Sub_Type__c || null,
-                    CampaignType:r.Campaign_Type__c || null, Contact:r.Contact__c || null, 
+                    CampaignType:r.Campaign_Type__c || null, Contact:r.Contact__c || null,
                     CreatedDate: new Date(r.CreatedDate).toISOString(), // Standardize to ISO string for AI
                     CreatedDateCustom:r.Created_Date_Custom__c || null, CurrentInterestedProductScoreGrade:r.Current_Interested_Product_Score_Grade__c || null,
                     CustomerSelectedProduct:r.Customer_Selected_Product__c || null, CustomersPerceivedSLA:r.CustomersPerceivedSLA__c || null,
-                    DateContacted:r.Date_Contacted__c ? new Date(r.Date_Contacted__c).toISOString() : null, 
-                    DateEmailed:r.Date_Emailed__c ? new Date(r.Date_Emailed__c).toISOString() : null, 
+                    DateContacted:r.Date_Contacted__c ? new Date(r.Date_Contacted__c).toISOString() : null,
+                    DateEmailed:r.Date_Emailed__c ? new Date(r.Date_Emailed__c).toISOString() : null,
                     Description:r.Description__c || null,
-                    DispositionedDate:r.Dispositioned_Date__c ? new Date(r.Dispositioned_Date__c).toISOString() : null, 
+                    DispositionedDate:r.Dispositioned_Date__c ? new Date(r.Dispositioned_Date__c).toISOString() : null,
                     LeadScoreAccountSecurity:r.Lead_Score_Account_Security__c || null,
                     LeadScoreContactCenterTwilioFlex:r.Lead_Score_Contact_Center_Twilio_Flex__c || null,
                     LeadScoreSMSMessaging:r.Lead_Score_SMS_Messaging__c || null, LeadScoreVoiceIVRSIPTrunking:r.Lead_Score_Voice_IVR_SIP_Trunking__c || null,
@@ -1068,42 +1070,79 @@ function getValueByKey(arr, key) {
 
 function transformQuarterlyStructure(qAiOutput, qKey, summarObj) {
     const res = {};
-    const [yStr, qStr] = qKey.split('-');
+    const [yStr, qStr] = qKey.split('-'); // e.g., qKey = "2023-Q1" -> yStr="2023", qStr="Q1"
     const year = parseInt(yStr);
 
+    // Basic validation of inputs
     if (!qAiOutput || typeof qAiOutput !== 'object' || !year || !qStr) {
-        console.warn(`[Transform] Invalid input for ${summarObj} quarterly transformation (qKey: ${qKey}):`, { qAiOutput });
-        return res; 
+        console.warn(`[Transform] Invalid input for ${summarObj} quarterly transformation (qKey: ${qKey}). AI Output:`, qAiOutput);
+        return res; // Return empty if essential parts are missing
     }
 
-    let html = '', count = 0, startDate = `${year}-${getQuarterStartMonth(qStr)}-01`; 
+    let html = '', count = 0, startDate = `${year}-${getQuarterStartMonth(qStr)}-01`;
+    let objectToSaveInSummaryField = qAiOutput; // By default, assume the AI output is what we want to save (true for CTA)
 
     if (summarObj === "Activity") {
-        const yearData = qAiOutput.yearlySummary?.[0];
-        const qData = yearData?.quarters?.[0];
-        if (qData && qData.quarter === qStr && yearData.year === year) {
-            html = qData.summary || '';
-            count = qData.activityCount || 0;
-            startDate = qData.startdate || startDate;
+        // For Activities, the AI output is nested: { yearlySummary: [{ year: Y, quarters: [ Q_DATA ] }] }
+        // We want to extract Q_DATA to be stringified for the 'summary' field.
+        const yearDataArray = qAiOutput.yearlySummary;
+        if (Array.isArray(yearDataArray) && yearDataArray.length > 0) {
+            const yearDataObject = yearDataArray[0];
+            if (yearDataObject && typeof yearDataObject === 'object' && yearDataObject.year === year) {
+                const quartersArray = yearDataObject.quarters;
+                if (Array.isArray(quartersArray) && quartersArray.length > 0) {
+                    const quarterDataObject = quartersArray[0]; // This is Q_DATA, e.g., {"quarter":"Q1", "summary": "...", ...}
+                    if (quarterDataObject && typeof quarterDataObject === 'object' && quarterDataObject.quarter === qStr) {
+                        // Successfully extracted the specific quarter data object
+                        html = quarterDataObject.summary || '';
+                        count = quarterDataObject.activityCount || 0;
+                        startDate = quarterDataObject.startdate || startDate; // Use date from AI if available
+                        objectToSaveInSummaryField = quarterDataObject; // CRITICAL: Update to save the un-nested quarterly object
+                        console.log(`[Transform] Successfully extracted and processed Activity quarterly data for ${qKey}.`);
+                    } else {
+                        console.warn(`[Transform] Activity quarterly data for ${qKey} did not match expected quarter string '${qStr}' or was malformed. Quarter data from AI:`, quarterDataObject);
+                        // objectToSaveInSummaryField remains qAiOutput (the nested structure), which is not ideal but indicates an AI deviation.
+                        // The saved summary will be the original nested structure if this path is taken.
+                    }
+                } else {
+                    console.warn(`[Transform] Activity quarterly data for ${qKey} (year ${year}) had missing or empty 'quarters' array in yearlySummary[0]. AI Output:`, qAiOutput);
+                }
+            } else {
+                console.warn(`[Transform] Activity quarterly data for ${qKey} did not match expected year ${year} or was malformed in 'yearlySummary[0]'. AI Output:`, qAiOutput);
+            }
         } else {
-             console.warn(`[Transform] Mismatched Activity quarter data for ${qKey}. Using defaults. AI Output:`, qAiOutput);
+            console.warn(`[Transform] Activity quarterly data for ${qKey} had missing or empty 'yearlySummary' array. AI Output:`, qAiOutput);
         }
     } else if (summarObj === "CTA") {
+        // For CTAs, qAiOutput is already the direct quarterly summary object.
+        // { quarter: "Q1", aggregated_data: {...}, html_report: "..." }
         html = qAiOutput.html_report || '';
-        count = qAiOutput.aggregated_data?.total_ctas || 0;
+        if (qAiOutput.aggregated_data && typeof qAiOutput.aggregated_data === 'object') {
+            count = qAiOutput.aggregated_data.total_ctas || 0;
+        } else {
+            console.warn(`[Transform] CTA quarterly data for ${qKey} missing 'aggregated_data' or it's not an object. AI Output:`, qAiOutput);
+        }
+        // objectToSaveInSummaryField is already qAiOutput, which is correct for CTAs.
         if (html) console.log(`[Transform] CTA Quarterly html_report for ${qKey} (length: ${html.length}, to be saved): '${String(html).substring(0,100)}...'`);
         else console.warn(`[Transform] CTA Quarterly html_report for ${qKey} is MISSING/EMPTY in AI output.`);
     }
 
-    if (!res[year]) res[year] = {};
+    // Ensure the year exists in the result structure
+    if (!res[year]) {
+        res[year] = {};
+    }
+
+    // Store the transformed data
     res[year][qStr] = {
-        summaryDetails: html, 
-        summary: JSON.stringify(qAiOutput), // CORRECTED: Renamed from summaryJson to summary
+        summaryDetails: html, // This is the HTML part for Summary_Details__c
+        summary: JSON.stringify(objectToSaveInSummaryField), // This is the JSON for Summary__c
         count: count,
         startdate: startDate
     };
+
     return res;
 }
+
 
 function getQuarterStartMonth(q) {
     if (!q || typeof q !== 'string') {
