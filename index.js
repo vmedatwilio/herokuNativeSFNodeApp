@@ -88,10 +88,10 @@ const defaultFunctions = [
                         "type": "object",
                         "properties": {
                           "Id": { "type": "string", "description": "Salesforce Id of the specific activity" },
-                          "LinkText": { "type": "string", "description": "'MMM DD YYYY: Short Description (max 50 chars)' - Generate from ActivityDate, Subject, Description." },
-                          "ActivityDate": { "type": "string", "description": "Activity Date in 'YYYY-MM-DD' format. Must belong to the summarized month/year." }
+                          "LinkText": { "type": "string", "description": "'MMM DD YYYY: Short Description (max 50 chars)' - Generate from Createddate, Subject, Description." },
+                          "Createddate": { "type": "string", "description": "Createddate in 'YYYY-MM-DD' format. Must belong to the summarized month/year." }
                         },
-                        "required": ["Id", "LinkText", "ActivityDate"],
+                        "required": ["Id", "LinkText", "Createddate"],
                         "additionalProperties": false
                       }
                     }
@@ -115,10 +115,10 @@ const defaultFunctions = [
                           "type": "object",
                           "properties": {
                             "Id": { "type": "string", "description": "Salesforce Id of the specific activity" },
-                            "LinkText": { "type": "string", "description": "'MMM DD YYYY: Short Description (max 50 chars)' - Generate from ActivityDate, Subject, Description." },
-                            "ActivityDate": { "type": "string", "description": "Activity Date in 'YYYY-MM-DD' format. Must belong to the summarized month/year." }
+                            "LinkText": { "type": "string", "description": "'MMM DD YYYY: Short Description (max 50 chars)' - Generate from Createddate, Subject, Description." },
+                            "Createddate": { "type": "string", "description": "Createddate in 'YYYY-MM-DD' format. Must belong to the summarized month/year." }
                           },
-                          "required": ["Id", "LinkText", "ActivityDate"],
+                          "required": ["Id", "LinkText", "Createddate"],
                           "additionalProperties": false
                         }
                       }
@@ -141,10 +141,10 @@ const defaultFunctions = [
                           "type": "object",
                           "properties": {
                             "Id": { "type": "string", "description": "Salesforce Id of the specific activity" },
-                            "LinkText": { "type": "string", "description": "'MMM DD YYYY: Short Description (max 50 chars)' - Generate from ActivityDate, Subject, Description." },
-                            "ActivityDate": { "type": "string", "description": "Activity Date in 'YYYY-MM-DD' format. Must belong to the summarized month/year." }
+                            "LinkText": { "type": "string", "description": "'MMM DD YYYY: Short Description (max 50 chars)' - Generate from Createddate, Subject, Description." },
+                            "Createddate": { "type": "string", "description": "Createddate in 'YYYY-MM-DD' format. Must belong to the summarized month/year." }
                           },
-                          "required": ["Id", "LinkText", "ActivityDate"],
+                          "required": ["Id", "LinkText", "Createddate"],
                           "additionalProperties": false
                         }
                       }
@@ -216,9 +216,9 @@ const defaultFunctions = [
                                 "properties": {
                                   "id": { "type": "string", "description": "Salesforce Activity ID (copied from monthly input)." },
                                   "linkText": { "type": "string", "description": "'MMM DD YYYY: Short Description' (copied from monthly input)." },
-                                  "ActivityDate": { "type": "string", "description": "Activity Date in 'YYYY-MM-DD' format (copied from monthly input)." }
+                                  "Createddate": { "type": "string", "description": "Createddate in 'YYYY-MM-DD' format (copied from monthly input)." }
                                 },
-                                "required": ["id", "linkText", "ActivityDate"],
+                                "required": ["id", "linkText", "Createddate"],
                                 "additionalProperties": false
                               }
                             }
@@ -1042,16 +1042,16 @@ function groupRecordsByMonthYear(records) {
     const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
     records.forEach(activity => {
-        // Validate essential ActivityDate field
-        if (!activity.ActivityDate) {
-            console.warn(`Skipping activity (ID: ${activity.Id || 'Unknown'}) due to missing ActivityDate.`);
+        // Validate essential Createddate field
+        if (!activity.Createddate) {
+            console.warn(`Skipping activity (ID: ${activity.Id || 'Unknown'}) due to missing Createddate.`);
             return; // Skip record if date is missing
         }
         try {
             // Attempt to parse the date. Handle potential invalid date strings.
-            const date = new Date(activity.ActivityDate);
+            const date = new Date(activity.Createddate);
              if (isNaN(date.getTime())) {
-                 console.warn(`Skipping activity (ID: ${activity.Id || 'Unknown'}) due to invalid ActivityDate format: ${activity.ActivityDate}`);
+                 console.warn(`Skipping activity (ID: ${activity.Id || 'Unknown'}) due to invalid Createddate format: ${activity.Createddate}`);
                  return;
              }
 
@@ -1078,13 +1078,13 @@ function groupRecordsByMonthYear(records) {
                 Id: activity.Id,
                 Description: activity.Description || null, // Use null for missing values if preferred
                 Subject: activity.Subject || null,
-                ActivityDate: activity.ActivityDate // Keep original format if needed elsewhere
+                Createddate: activity.Createddate // Keep original format if needed elsewhere
                 // Add other fields from the SOQL query if required by the AI prompt/function schemas
                 // e.g., Type: activity.Type, Status: activity.Status
             });
         } catch(dateError) {
              // Catch potential errors during date processing (though basic validation is done above)
-             console.warn(`Skipping activity (ID: ${activity.Id || 'Unknown'}) due to date processing error: ${dateError.message}. Date value: ${activity.ActivityDate}`);
+             console.warn(`Skipping activity (ID: ${activity.Id || 'Unknown'}) due to date processing error: ${dateError.message}. Date value: ${activity.Createddate}`);
         }
     });
     console.log("Finished grouping records by year and month.");
