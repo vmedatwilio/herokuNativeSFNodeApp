@@ -953,17 +953,19 @@ async function createTimileSummarySalesforceRecords(conn, summaries, parentId, s
         const options = { allOrNone: false }; // Process records independently, allow partial success
 
         if (recordsToCreate.length > 0) {
-            console.log(`[${parentId}] Creating ${recordsToCreate.length} new ${summaryCategory} summary records via bulk API...`);
-            const createResults = await conn.bulk.load(TIMELINE_SUMMARY_OBJECT_API_NAME, "insert", options, recordsToCreate);
-            handleBulkResults(createResults, recordsToCreate, 'create', parentId);
+            console.log(`[${parentId}] Creating ${recordsToCreate.length} new ${summaryCategory} summary records...`);
+            //const createResults = await conn.bulk.load(TIMELINE_SUMMARY_OBJECT_API_NAME, "insert", options, recordsToCreate);
+            const createResults = await conn.sobject(TIMELINE_SUMMARY_OBJECT_API_NAME).create(recordsToCreate);
+            //handleBulkResults(createResults, recordsToCreate, 'create', parentId);
         } else {
             console.log(`[${parentId}] No new ${summaryCategory} records to create.`);
         }
 
         if (recordsToUpdate.length > 0) {
-            console.log(`[${parentId}] Updating ${recordsToUpdate.length} existing ${summaryCategory} summary records via bulk API...`);
-             const updateResults = await conn.bulk.load(TIMELINE_SUMMARY_OBJECT_API_NAME, "update", options, recordsToUpdate);
-             handleBulkResults(updateResults, recordsToUpdate, 'update', parentId);
+            console.log(`[${parentId}] Updating ${recordsToUpdate.length} existing ${summaryCategory} summary records...`);
+             //const updateResults = await conn.bulk.load(TIMELINE_SUMMARY_OBJECT_API_NAME, "update", options, recordsToUpdate);
+            const updateResults = await conn.sobject(TIMELINE_SUMMARY_OBJECT_API_NAME).update(recordsToUpdate);
+             //handleBulkResults(updateResults, recordsToUpdate, 'update', parentId);
         } else {
             console.log(`[${parentId}] No existing ${summaryCategory} records to update.`);
         }
