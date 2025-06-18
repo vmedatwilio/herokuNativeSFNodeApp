@@ -691,6 +691,7 @@ async function processSummary(
         console.log(`[${accountId}] Process completed.`);
         console.log(`sendCallback Before sendCallbackResponse is [${sendCallback}]`);
         if(sendCallback == 'Yes') {
+            console.log(`Inside sendCallbackResponse success if block, value is [${sendCallback}]`);
             await sendCallbackResponse(accountId, callbackUrl, loggedinUserId, accessToken, "Success", "Summary Processed Successfully");
         }
 
@@ -1104,6 +1105,7 @@ function groupRecordsByMonthYear(records) {
 // Sends the final status back to the specified Salesforce URL
 async function sendCallbackResponse(accountId, callbackUrl, loggedinUserId, accessToken, status, message) {
     // Truncate long messages for logging clarity
+    console.log(`Inside sendCallbackResponse method block, sending to sfdc`);
     const logMessage = message.length > 500 ? message.substring(0, 500) + '...' : message;
     console.log(`[${accountId}] Sending callback to ${callbackUrl}. Status: ${status}, Message: ${logMessage}`);
     try {
