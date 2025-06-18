@@ -409,6 +409,7 @@ app.post('/generatesummary', async (req, res) => {
         queryText, // SOQL query to fetch activities
         summaryMap, // Optional JSON string map of existing summary records (e.g., {"Jan 2024": "recordId"})
         loggedinUserId,
+        sendCallback,
         qtrJSON, // Optional override for quarterly function schema (JSON string)
         monthJSON // Optional override for monthly function schema (JSON string)
     } = req.body;
@@ -478,7 +479,8 @@ app.post('/generatesummary', async (req, res) => {
         monthlyFuncSchema, // Pass the final schema (default or custom)
         quarterlyFuncSchema, // Pass the final schema (default or custom)
         monthlyAssistantId, // Pass the ID obtained during startup
-        quarterlyAssistantId // Pass the ID obtained during startup
+        quarterlyAssistantId, // Pass the ID obtained during startup
+        sendCallback
     ).catch(async (error) => {
         console.error(`[${accountId}] Unhandled error during background processing:`, error);
         try {
@@ -513,7 +515,8 @@ async function processSummary(
     finalMonthlyFuncSchema, // Receive the final schema to use
     finalQuarterlyFuncSchema, // Receive the final schema to use
     finalMonthlyAssistantId, // Receive the final ID
-    finalQuarterlyAssistantId // Receive the final ID
+    finalQuarterlyAssistantId, // Receive the final ID
+    sendCallback
 ) {
     console.log(`[${accountId}] Starting processSummary using Monthly Asst: ${finalMonthlyAssistantId}, Quarterly Asst: ${finalQuarterlyAssistantId}`);
 
@@ -686,7 +689,9 @@ async function processSummary(
         // 8. Send Success Callback
         // TODO: Enhance status message for partial failures if needed.
         console.log(`[${accountId}] Process completed.`);
-        await sendCallbackResponse(accountId, callbackUrl, loggedinUserId, accessToken, "Success", "Summary Processed Successfully");
+        if(sendCallback) {
+            await sendCallbackResponse(accountId, callbackUrl, loggedinUserId, accessToken, "Success", "Summary Processed Successfully");
+        }
 
     } catch (error) {
         console.error(`[${accountId}] Error during summary processing:`, error);
