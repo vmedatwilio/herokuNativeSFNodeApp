@@ -689,7 +689,7 @@ async function processSummary(
         // 8. Send Success Callback
         // TODO: Enhance status message for partial failures if needed.
         console.log(`[${accountId}] Process completed.`);
-        if(sendCallback) {
+        if(sendCallback == 'Yes') {
             await sendCallbackResponse(accountId, callbackUrl, loggedinUserId, accessToken, "Success", "Summary Processed Successfully");
         }
 
