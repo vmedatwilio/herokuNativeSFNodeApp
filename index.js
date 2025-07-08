@@ -337,161 +337,146 @@ async function processSummary(
         const groupedData = await fetchRecords(conn, queryText);
         console.log(`[${accountId}] Fetched and grouped data by year/month. Total record count: ${Object.values(groupedData).flatMap(yearData => yearData.flatMap(monthObj => Object.values(monthObj)[0])).length}`);
 
-        // 2. Generate Monthly Summaries
-        const finalMonthlySummaries = {}; // Structure: { year: { month: { aiOutput: {}, count: N, startdate: "...", year: Y, monthIndex: M } } }
+        // 2. Generate Monthly Summaries (PARALLELIZED)
+        const finalMonthlySummaries = {};
         const monthMap = { january: 0, february: 1, march: 2, april: 3, may: 4, june: 5, july: 6, august: 7, september: 8, october: 9, november: 10, december: 11 };
+        const monthlySummaryPromises = [];
 
         for (const year in groupedData) {
-            console.log(`[${accountId}] Processing Year: ${year} for Monthly Summaries`);
             finalMonthlySummaries[year] = {};
             for (const monthObj of groupedData[year]) {
                 for (const month in monthObj) {
                     const activities = monthObj[month];
-                    console.log(`[${accountId}]   Processing Month: ${month} (${activities.length} activities)`);
-                    if (activities.length === 0) {
-                        console.log(`[${accountId}]   Skipping empty month: ${month} ${year}.`);
-                        continue;
-                    }
-
+                    if (activities.length === 0) continue;
                     const monthIndex = monthMap[month.toLowerCase()];
-                    if (monthIndex === undefined) {
-                         console.warn(`[${accountId}]   Could not map month name: ${month}. Skipping.`);
-                        continue;
-                    }
+                    if (monthIndex === undefined) continue;
                     const startDate = new Date(Date.UTC(year, monthIndex, 1));
                     const userPromptMonthly = userPromptMonthlyTemplate.replace('{{YearMonth}}', `${month} ${year}`);
-
-                    // --- Call generateSummary with the final monthly assistant ID and schema ---
-                    const monthlySummaryResult = await generateSummary(
-                        activities,
-                        openai,
-                        finalMonthlyAssistantId, // Use the ID obtained at startup
-                        userPromptMonthly,
-                        finalMonthlyFuncSchema // Use the final determined schema
+                    monthlySummaryPromises.push(
+                        generateSummary(
+                            activities,
+                            openai,
+                            finalMonthlyAssistantId,
+                            userPromptMonthly,
+                            finalMonthlyFuncSchema
+                        ).then(monthlySummaryResult => ({
+                            year,
+                            month,
+                            result: {
+                                aiOutput: monthlySummaryResult,
+                                count: activities.length,
+                                startdate: startDate.toISOString().split('T')[0],
+                                year: parseInt(year),
+                                monthIndex
+                            }
+                        }))
                     );
-
-                    // Store results
-                    finalMonthlySummaries[year][month] = {
-                         aiOutput: monthlySummaryResult,
-                         count: activities.length,
-                         startdate: startDate.toISOString().split('T')[0],
-                         year: parseInt(year),
-                         monthIndex: monthIndex
-                    };
-                     console.log(`[${accountId}]   Generated monthly summary for ${month} ${year}.`);
-                 }
+                }
             }
+        }
+
+        // Wait for all monthly summaries in parallel
+        const monthlyResults = await Promise.all(monthlySummaryPromises);
+        for (const { year, month, result } of monthlyResults) {
+            if (!finalMonthlySummaries[year]) finalMonthlySummaries[year] = {};
+            finalMonthlySummaries[year][month] = result;
         }
 
         // 3. Save Monthly Summaries to Salesforce
         const monthlyForSalesforce = {};
         for (const year in finalMonthlySummaries) {
-             monthlyForSalesforce[year] = {};
-             for (const month in finalMonthlySummaries[year]) {
-                 const monthData = finalMonthlySummaries[year][month];
-                 const aiSummary = monthData.aiOutput?.summary || ''; // Extract HTML part
-                 monthlyForSalesforce[year][month] = {
-                     summary: JSON.stringify(monthData.aiOutput), // Keep full JSON
-                     summaryDetails: aiSummary,
-                     count: monthData.count,
-                     startdate: monthData.startdate
-                 };
-             }
+            monthlyForSalesforce[year] = {};
+            for (const month in finalMonthlySummaries[year]) {
+                const monthData = finalMonthlySummaries[year][month];
+                const aiSummary = monthData.aiOutput?.summary || '';
+                monthlyForSalesforce[year][month] = {
+                    summary: JSON.stringify(monthData.aiOutput),
+                    summaryDetails: aiSummary,
+                    count: monthData.count,
+                    startdate: monthData.startdate
+                };
+            }
         }
-
         if (Object.keys(monthlyForSalesforce).length > 0 && Object.values(monthlyForSalesforce).some(year => Object.keys(year).length > 0)) {
             console.log(`[${accountId}] Saving monthly summaries to Salesforce...`);
             await createTimileSummarySalesforceRecords(conn, monthlyForSalesforce, accountId, 'Monthly', summaryRecordsMap,loggedinUserId);
             console.log(`[${accountId}] Monthly summaries saved.`);
         } else {
-             console.log(`[${accountId}] No monthly summaries generated to save.`);
+            console.log(`[${accountId}] No monthly summaries generated to save.`);
         }
-
 
         // 4. Group Monthly Summaries by Quarter
         console.log(`[${accountId}] Grouping monthly summaries by quarter...`);
-        const quarterlyInputGroups = {}; // Structure: { "YYYY-QX": [ monthlyAiOutput1, monthlyAiOutput2, ... ] }
+        const quarterlyInputGroups = {};
         for (const year in finalMonthlySummaries) {
             for (const month in finalMonthlySummaries[year]) {
                 const monthData = finalMonthlySummaries[year][month];
                 const quarter = getQuarterFromMonthIndex(monthData.monthIndex);
                 const quarterKey = `${year}-${quarter}`;
-
                 if (!quarterlyInputGroups[quarterKey]) {
                     quarterlyInputGroups[quarterKey] = [];
                 }
-                quarterlyInputGroups[quarterKey].push(monthData.aiOutput); // Push the AI output needed for aggregation
+                quarterlyInputGroups[quarterKey].push(monthData.aiOutput);
             }
         }
         console.log(`[${accountId}] Identified ${Object.keys(quarterlyInputGroups).length} quarters with data.`);
 
-
-        // 5. Generate Quarterly Summary for EACH Quarter
-        const allQuarterlyRawResults = {}; // Store raw AI output for each quarter { "YYYY-QX": quarterlyAiOutput }
-        for (const [quarterKey, monthlySummariesForQuarter] of Object.entries(quarterlyInputGroups)) {
-            console.log(`[${accountId}] Generating quarterly summary for ${quarterKey} using ${monthlySummariesForQuarter.length} monthly summaries...`);
-
-             if (!monthlySummariesForQuarter || monthlySummariesForQuarter.length === 0) {
-                console.warn(`[${accountId}] Skipping ${quarterKey} as it has no associated monthly summaries.`);
-                continue;
+        // 5. Generate Quarterly Summary for EACH Quarter (PARALLELIZED)
+        const quarterlySummaryPromises = Object.entries(quarterlyInputGroups).map(([quarterKey, monthlySummariesForQuarter]) => {
+            if (!monthlySummariesForQuarter || monthlySummariesForQuarter.length === 0) {
+                return Promise.resolve({ quarterKey, result: null });
             }
-
             const quarterlyInputDataString = JSON.stringify(monthlySummariesForQuarter, null, 2);
             const [year, quarter] = quarterKey.split('-');
             const userPromptQuarterly = `${userPromptQuarterlyTemplate.replace('{{Quarter}}', quarter).replace('{{Year}}', year)}\n\nAggregate the following monthly summary data provided below for ${quarterKey}:\n\`\`\`json\n${quarterlyInputDataString}\n\`\`\``;
-
-            // --- Call generateSummary with the final quarterly assistant ID and schema ---
-            try {
-                 const quarterlySummaryResult = await generateSummary(
-                    null, // No raw activities needed, data is in the prompt
-                    openai,
-                    finalQuarterlyAssistantId, // Use the ID obtained at startup
-                    userPromptQuarterly,
-                    finalQuarterlyFuncSchema // Use the final determined schema
-                 );
-                 allQuarterlyRawResults[quarterKey] = quarterlySummaryResult; // Store the raw AI JSON output
-                 console.log(`[${accountId}] Successfully generated quarterly summary for ${quarterKey}.`);
-            } catch (quarterlyError) {
-                 console.error(`[${accountId}] Failed to generate quarterly summary for ${quarterKey}:`, quarterlyError);
-                 // Log and continue. Consider how to report partial failures.
-            }
+            return generateSummary(
+                null,
+                openai,
+                finalQuarterlyAssistantId,
+                userPromptQuarterly,
+                finalQuarterlyFuncSchema
+            ).then(quarterlySummaryResult => ({ quarterKey, result: quarterlySummaryResult }))
+            .catch(error => {
+                console.error(`[${accountId}] Failed to generate quarterly summary for ${quarterKey}:`, error);
+                return { quarterKey, result: null };
+            });
+        });
+        const quarterlyResults = await Promise.all(quarterlySummaryPromises);
+        const allQuarterlyRawResults = {};
+        for (const { quarterKey, result } of quarterlyResults) {
+            if (result) allQuarterlyRawResults[quarterKey] = result;
         }
-
 
         // 6. Transform and Consolidate ALL Quarterly Results
         console.log(`[${accountId}] Transforming ${Object.keys(allQuarterlyRawResults).length} generated quarterly summaries...`);
-        const finalQuarterlyDataForSalesforce = {}; // Structure: { year: { QX: { summaryDetails, summaryJson, count, startdate } } }
+        const finalQuarterlyDataForSalesforce = {};
         for (const [quarterKey, rawAiResult] of Object.entries(allQuarterlyRawResults)) {
-             const transformedResult = transformQuarterlyStructure(rawAiResult); // Process one quarter's AI output
-             // Merge this single-quarter result into the final structure
-             for (const year in transformedResult) {
-                 if (!finalQuarterlyDataForSalesforce[year]) {
-                     finalQuarterlyDataForSalesforce[year] = {};
-                 }
-                 for (const quarter in transformedResult[year]) {
-                     if (!finalQuarterlyDataForSalesforce[year][quarter]) {
+            const transformedResult = transformQuarterlyStructure(rawAiResult);
+            for (const year in transformedResult) {
+                if (!finalQuarterlyDataForSalesforce[year]) {
+                    finalQuarterlyDataForSalesforce[year] = {};
+                }
+                for (const quarter in transformedResult[year]) {
+                    if (!finalQuarterlyDataForSalesforce[year][quarter]) {
                         finalQuarterlyDataForSalesforce[year][quarter] = transformedResult[year][quarter];
-                     } else {
-                         console.warn(`[${accountId}] Duplicate transformed data found for ${quarter} ${year}. Overwriting is prevented, but check logic.`);
-                     }
-                 }
-             }
+                    } else {
+                        console.warn(`[${accountId}] Duplicate transformed data found for ${quarter} ${year}. Overwriting is prevented, but check logic.`);
+                    }
+                }
+            }
         }
 
-
         // 7. Save ALL Generated Quarterly Summaries to Salesforce
-         if (Object.keys(finalQuarterlyDataForSalesforce).length > 0 && Object.values(finalQuarterlyDataForSalesforce).some(year => Object.keys(year).length > 0)) {
+        if (Object.keys(finalQuarterlyDataForSalesforce).length > 0 && Object.values(finalQuarterlyDataForSalesforce).some(year => Object.keys(year).length > 0)) {
             const totalQuarterlyRecords = Object.values(finalQuarterlyDataForSalesforce).reduce((sum, year) => sum + Object.keys(year).length, 0);
             console.log(`[${accountId}] Saving ${totalQuarterlyRecords} quarterly summaries to Salesforce...`);
             await createTimileSummarySalesforceRecords(conn, finalQuarterlyDataForSalesforce, accountId, 'Quarterly', summaryRecordsMap,loggedinUserId);
             console.log(`[${accountId}] Quarterly summaries saved.`);
         } else {
-             console.log(`[${accountId}] No quarterly summaries generated or transformed to save.`);
+            console.log(`[${accountId}] No quarterly summaries generated or transformed to save.`);
         }
 
-
         // 8. Send Success Callback
-        // TODO: Enhance status message for partial failures if needed.
         console.log(`[${accountId}] Process completed.`);
         console.log(`sendCallback Before sendCallbackResponse is [${sendCallback}]`);
         if(sendCallback == 'Yes') {
